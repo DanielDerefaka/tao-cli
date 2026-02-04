@@ -426,10 +426,19 @@ async def _process_message_v2(
         context.add_assistant_message(response.message)
 
     elif response.action == ResponseAction.CONFIRM:
-        # Show confirmation prompt
-        console.print(f"[info]{response.message}[/info]")
-        context.add_user_message(user_input)
-        context.add_assistant_message(response.message)
+        # Show confirmation prompt - enhance for REGISTER with subnet info
+        intent = response.intent
+        if intent and intent.type == SMIntentType.REGISTER and intent.slots.netuid:
+            confirm_msg = await _build_register_confirmation(
+                taostats, intent.slots.netuid, intent.slots.wallet
+            )
+            console.print(confirm_msg)
+            context.add_user_message(user_input)
+            context.add_assistant_message(confirm_msg)
+        else:
+            console.print(f"[info]{response.message}[/info]")
+            context.add_user_message(user_input)
+            context.add_assistant_message(response.message)
 
     elif response.action == ResponseAction.EXECUTE:
         # Execute the intent
@@ -531,9 +540,20 @@ async def _execute_intent(
         return f"Displayed metagraph for subnet {slots.netuid}."
 
     elif intent.type == SMIntentType.REGISTER:
-        console.print(f"[info]Would register on subnet {slots.netuid}[/info]")
-        console.print("[warning]Full register implementation pending[/warning]")
-        return f"Register request for subnet {slots.netuid} processed."
+        netuid = slots.netuid or 1
+        success = await register_cmds.register_burned(
+            executor=executor,
+            sdk=sdk,
+            taostats=taostats,
+            netuid=netuid,
+            wallet_name=slots.wallet,
+            hotkey_name=slots.hotkey,
+            dry_run=settings.demo_mode,
+        )
+        if success:
+            return f"Registered on subnet {netuid}."
+        else:
+            return f"Registration on subnet {netuid} cancelled or failed."
 
     elif intent.type == SMIntentType.HELP:
         _show_help()
@@ -549,6 +569,31 @@ async def _execute_intent(
     else:
         console.print(f"[muted]Intent: {intent}[/muted]")
         return f"Processed intent: {intent.type.value}"
+
+
+async def _build_register_confirmation(
+    taostats: TaostatsClient,
+    netuid: int,
+    wallet_name: Optional[str] = None,
+) -> str:
+    """Build a rich confirmation message for registration with subnet details."""
+    try:
+        subnet = await taostats.get_subnet(netuid)
+        price_info = await taostats.get_price()
+
+        if subnet:
+            subnet_name = subnet.name or "Unknown"
+            burn_cost = subnet.burn_cost
+            usd_cost = burn_cost * price_info.usd
+
+            msg = f"[info]Got it! You want to register on [bold]SN{netuid} - {subnet_name}[/bold].[/info]\n\n"
+            msg += f"[warning]Registration cost: [tao]{burn_cost:.4f} τ[/tao] (≈${usd_cost:.2f})[/warning]\n\n"
+            msg += "[info]Proceed with registration? (yes/no)[/info]"
+            return msg
+        else:
+            return f"[info]Register on subnet {netuid}? (yes/no)[/info]"
+    except Exception:
+        return f"[info]Register on subnet {netuid}? (yes/no)[/info]"
 
 
 def _show_help():

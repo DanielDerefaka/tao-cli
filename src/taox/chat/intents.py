@@ -108,12 +108,17 @@ class MockIntentParser:
             r"(?:show |list |top )?validators?\s*(?:on\s+)?(?:subnet\s*)?(\d+)?",
             r"who (?:are|is) the (?:top |best )?validators?",
         ],
-        IntentType.SUBNETS: [
-            r"(?:show |list )?subnets?",
-            r"what subnets",
-        ],
         IntentType.REGISTER: [
-            r"register\s*(?:on\s+)?(?:subnet\s*)?(\d+)?",
+            r"register\s+(?:me\s+)?(?:on\s+)?(?:subnet\s*|sn\s*)(\d+)",
+            r"register\s*(?:on\s+)?(?:subnet\s*|sn\s*)(\d+)",
+            r"register\s+(?:me\s+)?(?:on\s+)?(\d+)",
+            r"(?:i\s+)?(?:want\s+to\s+)?register(?:\s+(?:me\s+)?(?:on\s+)?(?:a\s+)?subnet)?",
+            r"join\s+(?:a\s+)?(?:subnet|sn)",
+        ],
+        IntentType.SUBNETS: [
+            r"(?:show |list )(?:\w+\s+)*subnets?",
+            r"^subnets?$",
+            r"what subnets",
         ],
         IntentType.HISTORY: [
             r"(?:view |show |list |get )?(?:my )?(?:transaction |tx )?history",

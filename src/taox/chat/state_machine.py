@@ -268,7 +268,18 @@ class FilledSlots(BaseModel):
             else:
                 self.validator_name = value
         elif slot_type == SlotType.NETUID:
-            self.netuid = int(value) if value else None
+            # Parse netuid from various formats: "1", "sn1", "sn 1", "subnet 1", etc.
+            if value:
+                import re
+                text = str(value).strip().lower()
+                # Try to extract number from formats like "sn 1", "subnet 1", "sn1"
+                match = re.search(r"(?:subnet\s*|sn\s*)?(\d+)", text)
+                if match:
+                    self.netuid = int(match.group(1))
+                else:
+                    self.netuid = None
+            else:
+                self.netuid = None
         elif slot_type == SlotType.WALLET:
             self.wallet = value
         elif slot_type == SlotType.HOTKEY:
