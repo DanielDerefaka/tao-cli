@@ -158,6 +158,7 @@ def welcome():
 @app.command()
 def chat(
     message: Optional[str] = typer.Argument(None, help="Initial message (optional)"),
+    legacy: bool = typer.Option(False, "--legacy", help="Use legacy pattern-based mode"),
 ):
     """Start interactive chat mode.
 
@@ -168,7 +169,85 @@ def chat(
         taox chat "what is my balance?"
         taox chat "stake 10 TAO to taostats on subnet 1"
     """
-    asyncio.run(_chat_loop(message))
+    settings = get_settings()
+
+    # Use LLM-first mode unless legacy flag or mode is "off"
+    if not legacy and settings.llm.mode == "always":
+        asyncio.run(_llm_chat_loop(message))
+    else:
+        asyncio.run(_chat_loop(message))
+
+
+async def _llm_chat_loop(initial_message: Optional[str] = None):
+    """LLM-first chat loop - the AI is always the brain."""
+    from taox.chat.router import Router
+
+    settings = get_settings()
+
+    # Initialize clients
+    taostats = TaostatsClient()
+    sdk = BittensorSDK()
+    executor = BtcliExecutor()
+
+    # Initialize router
+    router = Router(taostats=taostats, sdk=sdk, executor=executor)
+
+    # Show welcome
+    print_welcome()
+
+    if settings.demo_mode:
+        console.print(
+            "[warning]Demo mode - no real transactions[/warning]\n"
+        )
+
+    if not router.interpreter.is_available:
+        console.print("[warning]No Chutes API key - using pattern matching[/warning]")
+        console.print("[muted]Run 'taox setup' for full AI support[/muted]\n")
+    else:
+        console.print("[success]AI mode active[/success] - just talk naturally!\n")
+
+    console.print("[muted]Type 'quit' to exit, 'clear' to reset[/muted]\n")
+
+    # Process initial message if provided
+    if initial_message:
+        console.print(f"[prompt]You:[/prompt] {initial_message}")
+        response = await router.process(initial_message)
+        console.print(f"[info]{response}[/info]\n")
+
+    # Main loop
+    while True:
+        try:
+            user_input = console.input("[prompt]You:[/prompt] ").strip()
+
+            if not user_input:
+                continue
+
+            # Check for quit
+            if user_input.lower() in ("quit", "exit", "q"):
+                console.print("[muted]Goodbye![/muted]")
+                break
+
+            # Check for clear
+            if user_input.lower() == "clear":
+                router.clear()
+                console.clear()
+                print_welcome()
+                console.print("[muted]Conversation cleared.[/muted]\n")
+                continue
+
+            # Process through router
+            console.print()
+            response = await router.process(user_input)
+            console.print(f"[info]{response}[/info]\n")
+
+        except KeyboardInterrupt:
+            router.clear()
+            console.print("\n[muted]Cancelled. What else?[/muted]\n")
+        except EOFError:
+            break
+
+    # Cleanup
+    await taostats.close()
 
 
 async def _chat_loop(initial_message: Optional[str] = None):

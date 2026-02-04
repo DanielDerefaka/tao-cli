@@ -541,14 +541,31 @@ class ConversationEngine:
             )
 
         if parsed_intent.type == IntentType.GREETING:
+            # Vary the greeting response
+            import random
+
+            greetings = [
+                "Hey! What can I help you with?",
+                "Hi there! Ready to manage your TAO.",
+                "What's up! Balance, staking, or something else?",
+                "Hey! Ask me anything about your wallet.",
+            ]
             return ConversationResponse(
-                message="Hello! How can I help you with Bittensor today?",
+                message=random.choice(greetings),
                 action=ResponseAction.DISPLAY,
             )
 
         if parsed_intent.type == IntentType.UNKNOWN:
+            # More conversational fallback
+            text = user_input.lower()
+            # Check if it looks like a question
+            if "?" in user_input or text.startswith(("what", "how", "why", "when", "where", "who")):
+                return ConversationResponse(
+                    message="I focus on Bittensor operations - balance, staking, transfers, and registrations. What would you like to do?",
+                    action=ResponseAction.DISPLAY,
+                )
             return ConversationResponse(
-                message="I'm not sure what you'd like to do. Try 'help' for available commands, or ask about your balance, staking, or transfers.",
+                message="Not sure I understood that. Try something like 'show my balance' or 'stake 10 TAO'.",
                 action=ResponseAction.DISPLAY,
             )
 
@@ -766,6 +783,7 @@ class ConversationEngine:
             OldIntentType.VALIDATORS: IntentType.VALIDATORS,
             OldIntentType.SUBNETS: IntentType.SUBNETS,
             OldIntentType.HISTORY: IntentType.HISTORY,
+            OldIntentType.SET_CONFIG: IntentType.SET_DEFAULT,  # Map to SET_DEFAULT
             OldIntentType.HELP: IntentType.HELP,
             OldIntentType.CONFIRM: IntentType.CONFIRM,
             OldIntentType.GREETING: IntentType.GREETING,
@@ -779,8 +797,23 @@ class ConversationEngine:
         if text in ("cancel", "nevermind", "stop", "abort"):
             intent_type = IntentType.CANCEL
 
-        # Check for set default commands
-        if "use wallet" in text or "default wallet" in text or "switch to" in text:
+        # Check for set default/config commands
+        if any(
+            phrase in text
+            for phrase in [
+                "use wallet",
+                "default wallet",
+                "switch to",
+                "my hotkey is",
+                "hotkey is",
+                "my wallet is",
+                "wallet is",
+                "set hotkey",
+                "change hotkey",
+                "set wallet",
+                "change wallet",
+            ]
+        ):
             intent_type = IntentType.SET_DEFAULT
 
         # Build slots from old intent
@@ -845,14 +878,33 @@ class ConversationEngine:
 
         text = user_input.lower()
 
-        # Match "use wallet X" or "switch to wallet X"
-        wallet_match = re.search(r"(?:use|switch to|default)\s+(?:wallet\s+)?(\w+)", text)
+        # Match "my hotkey is X" or "hotkey is X" or "set hotkey to X"
+        hotkey_match = re.search(
+            r"(?:my\s+)?hotkey\s+(?:is|should be|=)\s*(\w+)|"
+            r"(?:set|use|change)\s+(?:my\s+)?hotkey\s+(?:to\s+)?(\w+)",
+            text,
+        )
+        if hotkey_match:
+            hotkey_name = hotkey_match.group(1) or hotkey_match.group(2)
+            self.preferences.default_hotkey = hotkey_name
+            self.preferences.save()
+            return ConversationResponse(
+                message=f"Got it! Updated hotkey to **{hotkey_name}**.",
+                action=ResponseAction.DISPLAY,
+            )
+
+        # Match "my wallet is X" or "wallet is X" or "use wallet X"
+        wallet_match = re.search(
+            r"(?:my\s+)?wallet\s+(?:is|should be|=)\s*(\w+)|"
+            r"(?:use|switch to|default|set|change)\s+(?:my\s+)?(?:wallet\s+)?(?:to\s+)?(\w+)",
+            text,
+        )
         if wallet_match:
-            wallet_name = wallet_match.group(1)
+            wallet_name = wallet_match.group(1) or wallet_match.group(2)
             self.preferences.default_wallet = wallet_name
             self.preferences.save()
             return ConversationResponse(
-                message=f"Got it! I'll use wallet **{wallet_name}** by default from now on.",
+                message=f"Got it! Updated wallet to **{wallet_name}**.",
                 action=ResponseAction.DISPLAY,
             )
 
@@ -863,12 +915,12 @@ class ConversationEngine:
             self.preferences.default_netuid = netuid
             self.preferences.save()
             return ConversationResponse(
-                message=f"Got it! I'll use subnet **{netuid}** by default from now on.",
+                message=f"Got it! Default subnet set to **{netuid}**.",
                 action=ResponseAction.DISPLAY,
             )
 
         return ConversationResponse(
-            message="I can set defaults for you. Try: 'use wallet myname' or 'default subnet 1'",
+            message="I can set defaults for you. Try: 'my hotkey is name' or 'use wallet name'",
             action=ResponseAction.DISPLAY,
         )
 

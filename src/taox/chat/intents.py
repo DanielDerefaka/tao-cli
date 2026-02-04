@@ -21,6 +21,7 @@ class IntentType(str, Enum):
     VALIDATORS = "validators"
     SUBNETS = "subnets"
     HISTORY = "history"  # Transaction history
+    SET_CONFIG = "set_config"  # Update settings like hotkey, wallet
     HELP = "help"
     CONFIRM = "confirm"  # User confirming something
     GREETING = "greeting"  # Hello, hi, etc.
@@ -93,6 +94,11 @@ class MockIntentParser:
             r"what(?:'s| is) my balance",
             r"check balance",
             r"show balance",
+            r"how many tao",
+            r"my tao",
+            r"tao balance",
+            r"what do i have",
+            r"show me (?:my )?(?:tao|balance)",
         ],
         IntentType.PORTFOLIO: [
             r"portfolio",
@@ -126,6 +132,13 @@ class MockIntentParser:
             r"what (?:have i|did i) (?:done|sent|transferred|staked)",
             r"(?:show |list )?(?:my )?(?:recent )?(?:activity|actions)",
         ],
+        IntentType.SET_CONFIG: [
+            r"(?:my |the )?hotkey\s+(?:is|should be|=)\s*(\w+)",
+            r"(?:set|use|change)\s+(?:my\s+)?hotkey\s+(?:to\s+)?(\w+)",
+            r"(?:my |the )?wallet\s+(?:is|should be|=)\s*(\w+)",
+            r"(?:set|use|change)\s+(?:my\s+)?wallet\s+(?:to\s+)?(\w+)",
+            r"(?:i(?:'m| am)\s+)?using\s+(?:hotkey|wallet)\s+(\w+)",
+        ],
         IntentType.HELP: [
             r"help",
             r"what (?:else )?can you do",
@@ -149,11 +162,17 @@ class MockIntentParser:
             r"^do it$",
         ],
         IntentType.GREETING: [
-            r"^hi$",
-            r"^hello$",
-            r"^hey$",
+            r"^hi+$",
+            r"^hello+$",
+            r"^hey+(?:\s|$)",
             r"^sup$",
-            r"^yo$",
+            r"^yo+$",
+            r"what'?s?\s*(up|good)",
+            r"how'?s?\s*it\s*going",
+            r"^good\s*(morning|afternoon|evening)",
+            r"^gm$",
+            r"^greetings",
+            r"^hey+\s+.*(up|good|going)",
         ],
     }
 
@@ -232,6 +251,18 @@ class MockIntentParser:
                     ):
                         if groups and groups[0]:
                             intent.netuid = int(groups[0])
+
+                    elif intent_type == IntentType.SET_CONFIG and groups:
+                        # Extract the value being set
+                        value = groups[0] if groups[0] else None
+                        # Determine if it's hotkey or wallet from the pattern
+                        if "hotkey" in text:
+                            intent.hotkey_name = value
+                            intent.extra["config_key"] = "hotkey"
+                        elif "wallet" in text:
+                            intent.wallet_name = value
+                            intent.extra["config_key"] = "wallet"
+                        intent.extra["config_value"] = value
 
                     return intent
 

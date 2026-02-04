@@ -14,10 +14,12 @@ class LLMSettings(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     provider: str = "chutes"
-    model: str = "unsloth/Mistral-Nemo-Instruct-2407"  # 12B, natural conversational style
-    temperature: float = 0.7
+    model: str = "deepseek-ai/DeepSeek-V3"
+    temperature: float = 0.3  # Lower for more consistent structured output
     max_tokens: int = 1000
     base_url: str = "https://llm.chutes.ai/v1"
+    # LLM mode: "always" = LLM-first, "fallback" = pattern-first, "off" = patterns only
+    mode: str = "always"
 
 
 class BittensorSettings(BaseModel):
@@ -119,10 +121,11 @@ def create_default_config() -> None:
             "demo_mode": False,
             "llm": {
                 "provider": "chutes",
-                "model": "unsloth/Mistral-Nemo-Instruct-2407",
-                "temperature": 0.7,
+                "model": "deepseek-ai/DeepSeek-V3",
+                "temperature": 0.3,
                 "max_tokens": 1000,
                 "base_url": "https://llm.chutes.ai/v1",
+                "mode": "always",  # LLM-first: always | fallback | off
             },
             "bittensor": {
                 "network": "finney",
