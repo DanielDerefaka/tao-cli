@@ -1,15 +1,16 @@
 """Wallet operations for taox."""
 
 from typing import Optional
-from rich.table import Table
-from rich import box
 
-from taox.ui.console import console, format_tao, format_address, print_success, print_error
-from taox.ui.theme import TaoxColors
-from taox.data.sdk import BittensorSDK, WalletInfo, BalanceInfo
-from taox.commands.executor import BtcliExecutor, build_balance_command, build_transfer_command
-from taox.security.confirm import confirm_transaction
+from rich import box
+from rich.table import Table
+
+from taox.commands.executor import BtcliExecutor, build_transfer_command
 from taox.config.settings import get_settings
+from taox.data.sdk import BalanceInfo, BittensorSDK, WalletInfo
+from taox.security.confirm import confirm_transaction
+from taox.ui.console import console, format_address, format_tao, print_error, print_success
+from taox.ui.theme import TaoxColors
 
 
 async def list_wallets(sdk: BittensorSDK) -> list[WalletInfo]:

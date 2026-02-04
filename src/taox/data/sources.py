@@ -8,13 +8,12 @@ This module ensures all responses are grounded in real data with clear attributi
 """
 
 import logging
-from enum import Enum
-from datetime import datetime
-from typing import Optional, Any, Generic, TypeVar
 from dataclasses import dataclass, field
+from datetime import datetime
+from enum import Enum
+from typing import Generic, Optional, TypeVar
 
 from taox.config.settings import get_settings
-
 
 logger = logging.getLogger(__name__)
 
@@ -125,10 +124,7 @@ class GroundedData(Generic[T]):
     @property
     def is_available(self) -> bool:
         """Check if data is actually available."""
-        return (
-            self.value is not None
-            and self.attribution.source != DataSource.UNAVAILABLE
-        )
+        return self.value is not None and self.attribution.source != DataSource.UNAVAILABLE
 
     @property
     def is_reliable(self) -> bool:
@@ -247,6 +243,7 @@ class DataGrounder:
         # Check Bittensor SDK
         try:
             from taox.data.sdk import BITTENSOR_AVAILABLE
+
             availability.bittensor_sdk = BITTENSOR_AVAILABLE
             if not BITTENSOR_AVAILABLE:
                 availability.sdk_error = "SDK not installed"
@@ -341,6 +338,7 @@ def get_data_grounder() -> DataGrounder:
 # Response Formatting
 # =============================================================================
 
+
 @dataclass
 class GroundedResponse:
     """A response with data grounding information."""
@@ -403,6 +401,7 @@ class GroundedResponse:
 # =============================================================================
 # Helper Functions
 # =============================================================================
+
 
 def format_balance_with_source(
     balance: float,

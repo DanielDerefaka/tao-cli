@@ -1,6 +1,7 @@
 """Interactive prompts using InquirerPy for taox."""
 
 from typing import Optional
+
 from InquirerPy import inquirer
 from InquirerPy.base.control import Choice
 

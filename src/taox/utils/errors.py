@@ -1,15 +1,14 @@
 """Error handling utilities for taox."""
 
 import asyncio
-import logging
 import functools
-from typing import TypeVar, Callable, Any, Optional
+import logging
 from enum import Enum
+from typing import Any, Callable, Optional, TypeVar
 
 import httpx
 
-from taox.ui.console import console, print_error, print_warning
-
+from taox.ui.console import console, print_error
 
 logger = logging.getLogger(__name__)
 
@@ -18,6 +17,7 @@ T = TypeVar("T")
 
 class ErrorCategory(Enum):
     """Categories of errors for user-friendly messages."""
+
     NETWORK = "network"
     AUTH = "authentication"
     VALIDATION = "validation"
@@ -52,7 +52,9 @@ class TaoxError(Exception):
 class NetworkError(TaoxError):
     """Network-related errors."""
 
-    def __init__(self, message: str, suggestion: Optional[str] = None, original: Optional[Exception] = None):
+    def __init__(
+        self, message: str, suggestion: Optional[str] = None, original: Optional[Exception] = None
+    ):
         super().__init__(
             message,
             category=ErrorCategory.NETWORK,
@@ -64,7 +66,9 @@ class NetworkError(TaoxError):
 class AuthenticationError(TaoxError):
     """Authentication-related errors."""
 
-    def __init__(self, message: str, suggestion: Optional[str] = None, original: Optional[Exception] = None):
+    def __init__(
+        self, message: str, suggestion: Optional[str] = None, original: Optional[Exception] = None
+    ):
         super().__init__(
             message,
             category=ErrorCategory.AUTH,
@@ -76,7 +80,9 @@ class AuthenticationError(TaoxError):
 class ValidationError(TaoxError):
     """Input validation errors."""
 
-    def __init__(self, message: str, suggestion: Optional[str] = None, original: Optional[Exception] = None):
+    def __init__(
+        self, message: str, suggestion: Optional[str] = None, original: Optional[Exception] = None
+    ):
         super().__init__(
             message,
             category=ErrorCategory.VALIDATION,
@@ -88,7 +94,9 @@ class ValidationError(TaoxError):
 class WalletError(TaoxError):
     """Wallet-related errors."""
 
-    def __init__(self, message: str, suggestion: Optional[str] = None, original: Optional[Exception] = None):
+    def __init__(
+        self, message: str, suggestion: Optional[str] = None, original: Optional[Exception] = None
+    ):
         super().__init__(
             message,
             category=ErrorCategory.WALLET,
@@ -100,7 +108,9 @@ class WalletError(TaoxError):
 class BlockchainError(TaoxError):
     """Blockchain interaction errors."""
 
-    def __init__(self, message: str, suggestion: Optional[str] = None, original: Optional[Exception] = None):
+    def __init__(
+        self, message: str, suggestion: Optional[str] = None, original: Optional[Exception] = None
+    ):
         super().__init__(
             message,
             category=ErrorCategory.BLOCKCHAIN,
@@ -208,6 +218,7 @@ def handle_errors(
     Returns:
         Decorated function
     """
+
     def decorator(func: Callable[..., T]) -> Callable[..., T]:
         @functools.wraps(func)
         def sync_wrapper(*args: Any, **kwargs: Any) -> T:

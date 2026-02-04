@@ -2,14 +2,14 @@
 
 import asyncio
 from typing import Optional
-from rich.panel import Panel
-from rich import box
 
 from InquirerPy import inquirer
+from rich import box
+from rich.panel import Panel
 
-from taox.ui.console import console, format_tao, format_address
-from taox.ui.theme import TaoxColors, Symbols
 from taox.config.settings import get_settings
+from taox.ui.console import console, format_address, format_tao
+from taox.ui.theme import Symbols, TaoxColors
 
 
 def _is_event_loop_running() -> bool:
@@ -139,7 +139,9 @@ def confirm_transaction(
         expected_prefix = to_address[:prefix_length].lower()
 
         if _is_event_loop_running():
-            user_input = _simple_text_input(f"Type first {prefix_length} chars of address to confirm:")
+            user_input = _simple_text_input(
+                f"Type first {prefix_length} chars of address to confirm:"
+            )
         else:
             user_input = inquirer.text(
                 message=f"Type first {prefix_length} chars of address to confirm:",

@@ -9,16 +9,14 @@ This module provides:
 
 import json
 import logging
-import os
+from dataclasses import asdict, dataclass
 from datetime import datetime
-from pathlib import Path
-from typing import TypeVar, Optional, Callable, Any, Tuple
-from functools import wraps
-from dataclasses import dataclass, asdict, field
 from enum import Enum
+from functools import wraps
+from pathlib import Path
+from typing import Any, Callable, Optional, TypeVar
 
 from cachetools import TTLCache
-
 
 logger = logging.getLogger(__name__)
 T = TypeVar("T")
@@ -26,6 +24,7 @@ T = TypeVar("T")
 
 class CacheStatus(str, Enum):
     """Status of a cache lookup."""
+
     HIT_FRESH = "hit_fresh"  # Cache hit within TTL
     HIT_STALE = "hit_stale"  # Cache hit but past TTL (usable as fallback)
     MISS = "miss"  # Cache miss
@@ -39,6 +38,7 @@ CACHE_DIR = Path.home() / ".taox" / "cache"
 @dataclass
 class CacheEntry:
     """A cached entry with timestamp and TTL."""
+
     value: Any
     created_at: str
     ttl: int
@@ -65,6 +65,7 @@ class CacheEntry:
 @dataclass
 class CacheResult:
     """Result of a cache lookup with metadata."""
+
     value: Any
     status: CacheStatus
     age_seconds: Optional[float] = None
@@ -110,7 +111,7 @@ class PersistentCache:
         """Load cache from disk."""
         try:
             if self.cache_file.exists():
-                with open(self.cache_file, "r") as f:
+                with open(self.cache_file) as f:
                     data = json.load(f)
                     for key, entry_data in data.items():
                         entry = CacheEntry(**entry_data)
@@ -127,8 +128,7 @@ class PersistentCache:
             self._ensure_dir()
             # Filter expired entries before saving
             valid_entries = {
-                k: asdict(v) for k, v in self._memory_cache.items()
-                if not v.is_expired()
+                k: asdict(v) for k, v in self._memory_cache.items() if not v.is_expired()
             }
             with open(self.cache_file, "w") as f:
                 json.dump(valid_entries, f, indent=2)
@@ -259,7 +259,7 @@ class OfflineManager:
         try:
             async with httpx.AsyncClient(timeout=5.0) as client:
                 # Try to reach a reliable endpoint
-                response = await client.get("https://api.taostats.io/api/health")
+                await client.get("https://api.taostats.io/api/health")
                 self.set_offline(False)
                 self.mark_network_checked()
                 return True
@@ -434,10 +434,7 @@ def cached(cache: Cache, key_func: Optional[Callable[..., str]] = None):
         @wraps(func)
         def wrapper(*args, **kwargs) -> T:
             # Generate cache key
-            if key_func:
-                key = key_func(*args, **kwargs)
-            else:
-                key = f"{func.__name__}:{args}:{kwargs}"
+            key = key_func(*args, **kwargs) if key_func else f"{func.__name__}:{args}:{kwargs}"
 
             # Try to get from cache
             result = cache.get(key)
@@ -468,10 +465,7 @@ def async_cached(cache: Cache, key_func: Optional[Callable[..., str]] = None):
     def decorator(func: Callable[..., T]) -> Callable[..., T]:
         @wraps(func)
         async def wrapper(*args, **kwargs) -> T:
-            if key_func:
-                key = key_func(*args, **kwargs)
-            else:
-                key = f"{func.__name__}:{args}:{kwargs}"
+            key = key_func(*args, **kwargs) if key_func else f"{func.__name__}:{args}:{kwargs}"
 
             result = cache.get(key)
             if result is not None:

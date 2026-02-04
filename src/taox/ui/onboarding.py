@@ -1,27 +1,28 @@
 """Onboarding flow for taox - wallet detection and welcome screen."""
 
-import os
-from pathlib import Path
+import contextlib
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Optional
 
+from rich import box
 from rich.panel import Panel
 from rich.table import Table
-from rich import box
-from rich.columns import Columns
-from rich.text import Text
 
-from taox.ui.console import console, print_success, print_warning, print_error, print_info
-from taox.ui.theme import TaoxColors, Symbols
 from taox.config.settings import (
-    get_settings, load_config_file, save_config_file,
-    get_config_path, reset_settings_cache
+    get_settings,
+    load_config_file,
+    reset_settings_cache,
+    save_config_file,
 )
+from taox.ui.console import console, print_error, print_success
+from taox.ui.theme import Symbols, TaoxColors
 
 
 @dataclass
 class WalletInfo:
     """Information about a detected wallet."""
+
     name: str
     path: Path
     has_coldkey: bool = False
@@ -56,7 +57,7 @@ def detect_wallets() -> list[WalletInfo]:
             continue
 
         # Skip hidden directories
-        if wallet_dir.name.startswith('.'):
+        if wallet_dir.name.startswith("."):
             continue
 
         wallet = WalletInfo(
@@ -74,29 +75,27 @@ def detect_wallets() -> list[WalletInfo]:
             try:
                 content = coldkey_file.read_bytes()
                 # Encrypted files typically start with specific bytes
-                wallet.is_encrypted = not content.startswith(b'-----BEGIN')
+                wallet.is_encrypted = not content.startswith(b"-----BEGIN")
             except:
                 wallet.is_encrypted = True
 
         # Try to read coldkey SS58 address from coldkeypub.txt
         if coldkeypub_file.exists():
-            try:
+            with contextlib.suppress(BaseException):
                 wallet.coldkey_ss58 = coldkeypub_file.read_text().strip()
-            except:
-                pass
 
         # Check for hotkeys
         hotkeys_dir = wallet_dir / "hotkeys"
         if hotkeys_dir.exists() and hotkeys_dir.is_dir():
             for hotkey_file in hotkeys_dir.iterdir():
-                if hotkey_file.is_file() and not hotkey_file.name.startswith('.'):
+                if hotkey_file.is_file() and not hotkey_file.name.startswith("."):
                     wallet.hotkey_names.append(hotkey_file.name)
                     wallet.has_hotkey = True
 
         wallets.append(wallet)
 
     # Sort wallets: 'default' first, then alphabetically
-    wallets.sort(key=lambda w: (w.name != 'default', w.name.lower()))
+    wallets.sort(key=lambda w: (w.name != "default", w.name.lower()))
 
     return wallets
 
@@ -198,13 +197,13 @@ def show_wallet_selection(wallets: list[WalletInfo]) -> Optional[WalletInfo]:
         try:
             choice = console.input("[prompt]Select wallet:[/prompt] ").strip().lower()
 
-            if choice == 'a':
+            if choice == "a":
                 return "all"  # Signal to use all wallets
 
-            if choice == 'n':
+            if choice == "n":
                 return None  # Signal to create new wallet
 
-            if choice == 's':
+            if choice == "s":
                 return "skip"  # Signal to skip/demo mode
 
             if choice.isdigit():
@@ -246,7 +245,9 @@ def select_hotkey(wallet: WalletInfo) -> Optional[str]:
 
     while True:
         try:
-            choice = console.input("[prompt]Select hotkey (or Enter for 'default'):[/prompt] ").strip()
+            choice = console.input(
+                "[prompt]Select hotkey (or Enter for 'default'):[/prompt] "
+            ).strip()
 
             if not choice:
                 # Default selection
@@ -370,7 +371,9 @@ def run_wallet_creation():
 
         # Create hotkey
         console.print("\n[info]Creating hotkey...[/info]")
-        console.print(f"[muted]Running: btcli wallet new-hotkey --wallet {wallet_name} --hotkey {hotkey_name}[/muted]\n")
+        console.print(
+            f"[muted]Running: btcli wallet new-hotkey --wallet {wallet_name} --hotkey {hotkey_name}[/muted]\n"
+        )
 
         result = subprocess.run(
             ["btcli", "wallet", "new-hotkey", "--wallet", wallet_name, "--hotkey", hotkey_name],
@@ -454,7 +457,9 @@ def run_onboarding() -> bool:
             # Re-detect wallets with new path
             wallets = detect_wallets()
             if not wallets:
-                console.print("[muted]No wallets found at custom path. Continuing in demo mode.[/muted]")
+                console.print(
+                    "[muted]No wallets found at custom path. Continuing in demo mode.[/muted]"
+                )
                 _enable_demo_mode()
                 mark_onboarding_complete()
                 return True
@@ -616,7 +621,9 @@ def show_current_wallet():
     for wallet in wallets:
         if wallet.name == wallet_name:
             if wallet.coldkey_ss58:
-                console.print(f"[primary]Address:[/primary] [address]{wallet.coldkey_ss58}[/address]")
+                console.print(
+                    f"[primary]Address:[/primary] [address]{wallet.coldkey_ss58}[/address]"
+                )
             break
 
 

@@ -2,15 +2,15 @@
 
 import json
 import logging
-from typing import Optional, AsyncGenerator
+from collections.abc import AsyncGenerator
+from typing import Optional
 
-from openai import OpenAI, AsyncOpenAI
+from openai import AsyncOpenAI, OpenAI
 
+from taox.chat.context import ConversationContext
+from taox.chat.intents import Intent, IntentType, MockIntentParser
 from taox.config.settings import get_settings
 from taox.security.credentials import CredentialManager
-from taox.chat.intents import Intent, IntentType, MockIntentParser
-from taox.chat.context import ConversationContext
-
 
 logger = logging.getLogger(__name__)
 
@@ -226,9 +226,7 @@ class LLMClient:
             logger.warning(f"LLM parsing failed, using mock parser: {e}")
             return MockIntentParser.parse(user_input)
 
-    async def parse_intent_async(
-        self, user_input: str, context: ConversationContext
-    ) -> Intent:
+    async def parse_intent_async(self, user_input: str, context: ConversationContext) -> Intent:
         """Async version of parse_intent.
 
         Args:
@@ -292,9 +290,7 @@ class LLMClient:
             logger.warning(f"Async LLM parsing failed: {e}")
             return MockIntentParser.parse(user_input)
 
-    def interpret_error(
-        self, error: str, intent: Optional[Intent] = None
-    ) -> dict:
+    def interpret_error(self, error: str, intent: Optional[Intent] = None) -> dict:
         """Interpret a btcli/subtensor error using LLM.
 
         Args:
@@ -402,9 +398,7 @@ class LLMClient:
             messages = [
                 {
                     "role": "system",
-                    "content": CHAT_SYSTEM_PROMPT.format(
-                        context=context.get_context_summary()
-                    ),
+                    "content": CHAT_SYSTEM_PROMPT.format(context=context.get_context_summary()),
                 },
             ]
             # History already includes the current user message (added by _process_message)
@@ -445,9 +439,7 @@ class LLMClient:
             messages = [
                 {
                     "role": "system",
-                    "content": CHAT_SYSTEM_PROMPT.format(
-                        context=context.get_context_summary()
-                    ),
+                    "content": CHAT_SYSTEM_PROMPT.format(context=context.get_context_summary()),
                 },
             ]
             # History already includes the current user message

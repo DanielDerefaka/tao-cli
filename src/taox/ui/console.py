@@ -1,12 +1,11 @@
 """Rich console setup and output helpers for taox."""
 
+from rich import box
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
-from rich import box
 
-from taox.ui.theme import taox_theme, TaoxColors, Symbols
-
+from taox.ui.theme import Symbols, TaoxColors, taox_theme
 
 # Main console instance with taox theme
 console = Console(theme=taox_theme)
@@ -88,10 +87,7 @@ def format_tao(amount: float, symbol: bool = True) -> str:
 
 def format_address(address: str, truncate: bool = True) -> str:
     """Format an SS58 address with optional truncation."""
-    if truncate and len(address) > 16:
-        display = f"{address[:8]}...{address[-8:]}"
-    else:
-        display = address
+    display = f"{address[:8]}...{address[-8:]}" if truncate and len(address) > 16 else address
     return f"[address]{display}[/address]"
 
 

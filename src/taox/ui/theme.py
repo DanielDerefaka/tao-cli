@@ -1,6 +1,7 @@
 """Theme and color definitions for taox."""
 
 from dataclasses import dataclass
+
 from rich.theme import Theme
 
 

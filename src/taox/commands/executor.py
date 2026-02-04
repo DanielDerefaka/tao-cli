@@ -8,23 +8,20 @@ This module provides a hardened execution layer for btcli commands with:
 - Postflight verification for transactions
 """
 
+import getpass
+import logging
 import os
 import re
-import sys
-import json
-import logging
-import getpass
 import subprocess
+from dataclasses import dataclass
+from datetime import datetime
 from enum import Enum
 from pathlib import Path
-from datetime import datetime
-from typing import Optional, Callable
-from dataclasses import dataclass, field, asdict
+from typing import Callable, Optional
 
 import pexpect
 
 from taox.config.settings import get_settings
-
 
 # Configure module logger
 logger = logging.getLogger(__name__)
@@ -35,6 +32,7 @@ DEBUG_LOG_DIR = Path.home() / ".taox" / "logs"
 
 class ExecutionStatus(str, Enum):
     """Status of command execution."""
+
     SUCCESS = "success"
     FAILED = "failed"
     TIMEOUT = "timeout"
@@ -46,9 +44,10 @@ class ExecutionStatus(str, Enum):
 
 class ExecutionMode(str, Enum):
     """Mode of execution."""
-    NORMAL = "normal"           # Non-interactive subprocess
-    INTERACTIVE = "interactive" # pexpect with password handling
-    DRY_RUN = "dry_run"        # Print command, don't execute
+
+    NORMAL = "normal"  # Non-interactive subprocess
+    INTERACTIVE = "interactive"  # pexpect with password handling
+    DRY_RUN = "dry_run"  # Print command, don't execute
 
 
 # Comprehensive password prompt patterns for different btcli commands
@@ -152,6 +151,7 @@ class CommandResult:
         error_message: Parsed, human-friendly error message
         raw_output: Complete raw output for debugging
     """
+
     status: ExecutionStatus
     stdout: str
     stderr: str
@@ -167,7 +167,11 @@ class CommandResult:
     @property
     def success(self) -> bool:
         """Check if command succeeded."""
-        return self.status in (ExecutionStatus.SUCCESS, ExecutionStatus.DRY_RUN, ExecutionStatus.DEMO_MODE)
+        return self.status in (
+            ExecutionStatus.SUCCESS,
+            ExecutionStatus.DRY_RUN,
+            ExecutionStatus.DEMO_MODE,
+        )
 
     @property
     def output(self) -> str:
@@ -248,7 +252,7 @@ class SecureDebugLogger:
         self._current_log_path = self.log_dir / f"{timestamp}_{cmd_name}.log"
 
         with open(self._current_log_path, "w") as f:
-            f.write(f"=== TAOX Debug Log ===\n")
+            f.write("=== TAOX Debug Log ===\n")
             f.write(f"Timestamp: {datetime.now().isoformat()}\n")
             f.write(f"Command: {self._sanitize(command_string)}\n")
             f.write(f"{'='*50}\n\n")
@@ -281,7 +285,7 @@ class SecureDebugLogger:
 
         with open(self._current_log_path, "a") as f:
             f.write(f"\n{'='*50}\n")
-            f.write(f"=== RESULT ===\n")
+            f.write("=== RESULT ===\n")
             f.write(f"Status: {result.status.value}\n")
             f.write(f"Return Code: {result.return_code}\n")
             f.write(f"Execution Time: {result.execution_time:.2f}s\n")
@@ -381,7 +385,7 @@ class OutputParser:
 
         # If we have stderr, return first line
         if stderr.strip():
-            first_line = stderr.strip().split('\n')[0]
+            first_line = stderr.strip().split("\n")[0]
             if len(first_line) < 200:
                 return first_line
 
@@ -409,7 +413,14 @@ class BtcliExecutor:
     ALLOWED_COMMANDS = {
         "wallet": ["list", "balance", "create", "transfer", "new-coldkey", "new-hotkey"],
         "stake": ["add", "remove", "list", "move", "wizard", "child"],
-        "subnets": ["list", "metagraph", "hyperparameters", "register", "pow-register", "burn-cost"],
+        "subnets": [
+            "list",
+            "metagraph",
+            "hyperparameters",
+            "register",
+            "pow-register",
+            "burn-cost",
+        ],
         "config": ["set", "get", "clear"],
         "sudo": ["get-take", "set-take"],
         "root": ["list", "weights"],
@@ -630,7 +641,11 @@ class BtcliExecutor:
                 return_code=result.returncode,
                 command=cmd,
                 tx_hash=self._output_parser.extract_tx_hash(result.stdout),
-                error_message=self._output_parser.parse_error_message(result.stdout, result.stderr) if status == ExecutionStatus.FAILED else None,
+                error_message=(
+                    self._output_parser.parse_error_message(result.stdout, result.stderr)
+                    if status == ExecutionStatus.FAILED
+                    else None
+                ),
                 raw_output=result.stdout + result.stderr,
             )
 
@@ -683,7 +698,9 @@ class BtcliExecutor:
         """
         try:
             logger.info(f"Executing (interactive): {self._sanitize_command_string(cmd)}")
-            self.debug_logger.log_output("EXECUTING (INTERACTIVE)", self._sanitize_command_string(cmd))
+            self.debug_logger.log_output(
+                "EXECUTING (INTERACTIVE)", self._sanitize_command_string(cmd)
+            )
 
             # Spawn process with proper argument passing
             # CRITICAL: Use cmd[0] with args, not " ".join(cmd) which gets shell-parsed
@@ -700,7 +717,9 @@ class BtcliExecutor:
             max_password_attempts = 2
 
             # Build combined pattern list: passwords, confirmations, EOF, TIMEOUT
-            all_patterns = PASSWORD_PATTERNS + CONFIRMATION_PATTERNS + [pexpect.EOF, pexpect.TIMEOUT]
+            all_patterns = (
+                PASSWORD_PATTERNS + CONFIRMATION_PATTERNS + [pexpect.EOF, pexpect.TIMEOUT]
+            )
             password_end_index = len(PASSWORD_PATTERNS)
             confirm_end_index = password_end_index + len(CONFIRMATION_PATTERNS)
             eof_index = confirm_end_index
@@ -722,7 +741,9 @@ class BtcliExecutor:
                         if password_attempts > max_password_attempts:
                             # Too many password attempts - likely wrong password
                             logger.warning("Too many password attempts")
-                            self.debug_logger.log_output("ERROR", "Too many password attempts - aborting")
+                            self.debug_logger.log_output(
+                                "ERROR", "Too many password attempts - aborting"
+                            )
                             child.close(force=True)
                             return CommandResult(
                                 status=ExecutionStatus.FAILED,
@@ -747,7 +768,9 @@ class BtcliExecutor:
 
                     elif index < confirm_end_index:
                         # Confirmation prompt matched - send 'y' to proceed
-                        self.debug_logger.log_output("ACTION", "Confirmation prompt detected, sending 'y'")
+                        self.debug_logger.log_output(
+                            "ACTION", "Confirmation prompt detected, sending 'y'"
+                        )
                         child.sendline("y")
 
                     elif index == eof_index:
@@ -759,7 +782,9 @@ class BtcliExecutor:
                     elif index == timeout_index:
                         # Timeout waiting for pattern
                         logger.warning("Timeout waiting for expected output")
-                        self.debug_logger.log_output("TIMEOUT", "Timeout waiting for expected output")
+                        self.debug_logger.log_output(
+                            "TIMEOUT", "Timeout waiting for expected output"
+                        )
 
                         # Capture any remaining output
                         try:
@@ -808,7 +833,11 @@ class BtcliExecutor:
                 return_code=return_code,
                 command=cmd,
                 tx_hash=self._output_parser.extract_tx_hash(stdout),
-                error_message=self._output_parser.parse_error_message(stdout, "") if status == ExecutionStatus.FAILED else None,
+                error_message=(
+                    self._output_parser.parse_error_message(stdout, "")
+                    if status == ExecutionStatus.FAILED
+                    else None
+                ),
                 raw_output=stdout,
             )
 
@@ -899,6 +928,7 @@ class BtcliExecutor:
 # COMMAND BUILDERS
 # Helper functions to build command argument dictionaries
 # =============================================================================
+
 
 def build_stake_add_command(
     amount: float,

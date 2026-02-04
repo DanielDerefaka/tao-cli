@@ -1,11 +1,10 @@
 """Configuration management for taox using Pydantic Settings."""
 
-from pathlib import Path
-from typing import Optional
 from functools import lru_cache
+from pathlib import Path
 
 import yaml
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -78,7 +77,9 @@ class Settings(BaseSettings):
 
     # Feature flags
     demo_mode: bool = Field(default=False, description="Run in demo mode without real API calls")
-    onboarding_complete: bool = Field(default=False, description="Whether onboarding has been completed")
+    onboarding_complete: bool = Field(
+        default=False, description="Whether onboarding has been completed"
+    )
 
     # Nested settings
     llm: LLMSettings = Field(default_factory=LLMSettings)

@@ -1,19 +1,17 @@
 """Tests for caching utilities."""
 
-import pytest
-import json
 import time
 from datetime import datetime, timedelta
-from pathlib import Path
-from unittest.mock import patch
+
+import pytest
 
 from taox.data.cache import (
     Cache,
-    PersistentCache,
     CacheEntry,
     OfflineManager,
-    cached,
+    PersistentCache,
     async_cached,
+    cached,
 )
 
 

@@ -1,14 +1,15 @@
 """Subnet operations for taox."""
 
 from typing import Optional
-from rich.table import Table
-from rich import box
 
+from rich import box
+from rich.table import Table
+
+from taox.commands.executor import BtcliExecutor, build_metagraph_command
+from taox.data.sdk import BittensorSDK, NeuronInfo
+from taox.data.taostats import Subnet, TaostatsClient
 from taox.ui.console import console, format_tao, print_error
 from taox.ui.theme import TaoxColors
-from taox.data.sdk import BittensorSDK, NeuronInfo
-from taox.data.taostats import TaostatsClient, Subnet
-from taox.commands.executor import BtcliExecutor, build_metagraph_command
 
 
 async def list_subnets(taostats: TaostatsClient) -> list[Subnet]:

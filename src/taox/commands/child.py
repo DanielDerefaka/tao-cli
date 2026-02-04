@@ -1,16 +1,16 @@
 """Child hotkey management operations for taox."""
 
 from typing import Optional
-from rich.table import Table
-from rich.panel import Panel
-from rich import box
 
-from taox.ui.console import console, format_address, print_success, print_error
-from taox.ui.theme import TaoxColors, Symbols
+from rich import box
+from rich.panel import Panel
+
 from taox.commands.executor import BtcliExecutor, CommandResult
+from taox.config.settings import get_settings
 from taox.data.sdk import BittensorSDK
 from taox.security.confirm import confirm_transaction, show_transaction_preview
-from taox.config.settings import get_settings
+from taox.ui.console import console, format_address, print_error, print_success
+from taox.ui.theme import Symbols
 
 
 def build_child_get_command(
@@ -183,7 +183,7 @@ async def get_child_hotkeys(
         result = executor.run(**cmd_info)
 
     if result.success:
-        console.print(f"\n[success]Child hotkey information:[/success]")
+        console.print("\n[success]Child hotkey information:[/success]")
         if result.stdout:
             console.print(result.stdout)
         else:
@@ -459,18 +459,21 @@ def child_wizard(
         True if operation was successful
     """
     import asyncio
+
     from InquirerPy import inquirer
     from InquirerPy.base.control import Choice
 
     settings = get_settings()
 
-    console.print(Panel(
-        "[bold]Child Hotkey Management[/bold]\n\n"
-        "Manage child hotkeys for stake delegation. Child hotkeys can receive\n"
-        "a portion of your stake's emissions on a subnet.",
-        title="[primary]Child Hotkey Wizard[/primary]",
-        box=box.ROUNDED
-    ))
+    console.print(
+        Panel(
+            "[bold]Child Hotkey Management[/bold]\n\n"
+            "Manage child hotkeys for stake delegation. Child hotkeys can receive\n"
+            "a portion of your stake's emissions on a subnet.",
+            title="[primary]Child Hotkey Wizard[/primary]",
+            box=box.ROUNDED,
+        )
+    )
     console.print()
 
     # Step 1: Select action
@@ -492,8 +495,7 @@ def child_wizard(
         return False
 
     wallet_choices = [
-        Choice(value=w.name, name=f"{w.name} ({format_address(w.coldkey_ss58)})")
-        for w in wallets
+        Choice(value=w.name, name=f"{w.name} ({format_address(w.coldkey_ss58)})") for w in wallets
     ]
 
     wallet_name = inquirer.select(
@@ -511,21 +513,25 @@ def child_wizard(
     console.print(f"[success]Using hotkey: {format_address(hotkey)}[/success]\n")
 
     # Step 3: Enter subnet ID
-    netuid = int(inquirer.number(
-        message="Enter subnet ID:",
-        min_allowed=1,
-        default=1,
-    ).execute())
+    netuid = int(
+        inquirer.number(
+            message="Enter subnet ID:",
+            min_allowed=1,
+            default=1,
+        ).execute()
+    )
 
     # Execute based on action
     if action == "get":
-        asyncio.run(get_child_hotkeys(
-            executor=executor,
-            sdk=sdk,
-            hotkey=hotkey,
-            netuid=netuid,
-            wallet_name=wallet_name,
-        ))
+        asyncio.run(
+            get_child_hotkeys(
+                executor=executor,
+                sdk=sdk,
+                hotkey=hotkey,
+                netuid=netuid,
+                wallet_name=wallet_name,
+            )
+        )
         return True
 
     elif action == "set":
@@ -537,24 +543,31 @@ def child_wizard(
             print_error("Invalid hotkey address")
             return False
 
-        proportion = float(inquirer.number(
-            message="Enter stake proportion (0-100%):",
-            float_allowed=True,
-            min_allowed=0,
-            max_allowed=100,
-            default=100,
-        ).execute()) / 100
+        proportion = (
+            float(
+                inquirer.number(
+                    message="Enter stake proportion (0-100%):",
+                    float_allowed=True,
+                    min_allowed=0,
+                    max_allowed=100,
+                    default=100,
+                ).execute()
+            )
+            / 100
+        )
 
-        return asyncio.run(set_child_hotkey(
-            executor=executor,
-            sdk=sdk,
-            child_hotkey=child_hotkey,
-            netuid=netuid,
-            proportion=proportion,
-            hotkey=hotkey,
-            wallet_name=wallet_name,
-            dry_run=settings.demo_mode,
-        ))
+        return asyncio.run(
+            set_child_hotkey(
+                executor=executor,
+                sdk=sdk,
+                child_hotkey=child_hotkey,
+                netuid=netuid,
+                proportion=proportion,
+                hotkey=hotkey,
+                wallet_name=wallet_name,
+                dry_run=settings.demo_mode,
+            )
+        )
 
     elif action == "revoke":
         child_hotkey = inquirer.text(
@@ -565,33 +578,42 @@ def child_wizard(
             print_error("Invalid hotkey address")
             return False
 
-        return asyncio.run(revoke_child_hotkey(
-            executor=executor,
-            sdk=sdk,
-            child_hotkey=child_hotkey,
-            netuid=netuid,
-            hotkey=hotkey,
-            wallet_name=wallet_name,
-            dry_run=settings.demo_mode,
-        ))
+        return asyncio.run(
+            revoke_child_hotkey(
+                executor=executor,
+                sdk=sdk,
+                child_hotkey=child_hotkey,
+                netuid=netuid,
+                hotkey=hotkey,
+                wallet_name=wallet_name,
+                dry_run=settings.demo_mode,
+            )
+        )
 
     elif action == "take":
-        take = float(inquirer.number(
-            message="Enter take rate (0-18%):",
-            float_allowed=True,
-            min_allowed=0,
-            max_allowed=18,
-            default=9,
-        ).execute()) / 100
+        take = (
+            float(
+                inquirer.number(
+                    message="Enter take rate (0-18%):",
+                    float_allowed=True,
+                    min_allowed=0,
+                    max_allowed=18,
+                    default=9,
+                ).execute()
+            )
+            / 100
+        )
 
-        return asyncio.run(set_child_take(
-            executor=executor,
-            sdk=sdk,
-            netuid=netuid,
-            take=take,
-            hotkey=hotkey,
-            wallet_name=wallet_name,
-            dry_run=settings.demo_mode,
-        ))
+        return asyncio.run(
+            set_child_take(
+                executor=executor,
+                sdk=sdk,
+                netuid=netuid,
+                take=take,
+                hotkey=hotkey,
+                wallet_name=wallet_name,
+                dry_run=settings.demo_mode,
+            )
+        )
 
     return False

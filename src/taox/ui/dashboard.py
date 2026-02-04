@@ -1,22 +1,19 @@
 """Full TUI dashboard for taox using Textual."""
 
-import asyncio
-from typing import Optional
 from datetime import datetime
+from typing import Optional
 
-from textual.app import App, ComposeResult
-from textual.containers import Container, Horizontal, Vertical, ScrollableContainer
-from textual.widgets import Header, Footer, Static, DataTable, Label, Button, LoadingIndicator
-from textual.reactive import reactive
-from textual.timer import Timer
-from textual import work
-from rich.text import Text
 from rich.panel import Panel
 from rich.table import Table
+from textual import work
+from textual.app import App, ComposeResult
+from textual.reactive import reactive
+from textual.timer import Timer
+from textual.widgets import Footer, Header, Static
 
-from taox.data.taostats import TaostatsClient, Validator, Subnet, PriceInfo
-from taox.data.sdk import BittensorSDK
 from taox.config.settings import get_settings
+from taox.data.sdk import BittensorSDK
+from taox.data.taostats import PriceInfo, Subnet, TaostatsClient, Validator
 
 
 class PriceWidget(Static):
@@ -92,7 +89,9 @@ class StakePositionsWidget(Static):
     def compose(self) -> ComposeResult:
         yield Static(id="positions-content")
 
-    def update_positions(self, positions: list[dict], validators: dict[str, str], usd_price: float) -> None:
+    def update_positions(
+        self, positions: list[dict], validators: dict[str, str], usd_price: float
+    ) -> None:
         if not positions:
             self.query_one("#positions-content", Static).update(
                 Panel("[dim]No stake positions[/dim]", border_style="yellow", title="📊 Positions")
@@ -133,7 +132,11 @@ class ValidatorsWidget(Static):
     def update_validators(self, validators: list[Validator]) -> None:
         if not validators:
             self.query_one("#validators-content", Static).update(
-                Panel("[dim]Loading validators...[/dim]", border_style="magenta", title="🏆 Top Validators")
+                Panel(
+                    "[dim]Loading validators...[/dim]",
+                    border_style="magenta",
+                    title="🏆 Top Validators",
+                )
             )
             return
 
@@ -307,9 +310,7 @@ class TaoxDashboard(App):
         self.refresh_data()
 
         # Set up auto-refresh
-        self._refresh_timer = self.set_interval(
-            self.refresh_interval, self.refresh_data
-        )
+        self._refresh_timer = self.set_interval(self.refresh_interval, self.refresh_data)
 
     @work(exclusive=True)
     async def refresh_data(self) -> None:

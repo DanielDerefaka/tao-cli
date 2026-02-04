@@ -1,10 +1,11 @@
 """Table display utilities for taox."""
 
 from typing import Optional
-from rich.table import Table
-from rich import box
 
-from taox.ui.console import console, format_tao, format_address
+from rich import box
+from rich.table import Table
+
+from taox.ui.console import console, format_address, format_tao
 from taox.ui.theme import TaoxColors
 
 

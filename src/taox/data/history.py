@@ -3,18 +3,17 @@
 import csv
 import json
 import logging
+from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
 from typing import Optional
-from dataclasses import dataclass, asdict, field
 
-from rich.table import Table
 from rich import box
+from rich.table import Table
 
-from taox.ui.console import console, format_tao, format_address
+from taox.ui.console import console, format_address, format_tao
 from taox.ui.theme import TaoxColors
-
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +23,7 @@ HISTORY_FILE = HISTORY_DIR / "transactions.json"
 
 class TransactionType(str, Enum):
     """Types of transactions."""
+
     STAKE = "stake"
     UNSTAKE = "unstake"
     TRANSFER = "transfer"
@@ -35,6 +35,7 @@ class TransactionType(str, Enum):
 
 class TransactionStatus(str, Enum):
     """Status of a transaction."""
+
     PENDING = "pending"
     SUCCESS = "success"
     FAILED = "failed"
@@ -44,6 +45,7 @@ class TransactionStatus(str, Enum):
 @dataclass
 class Transaction:
     """A recorded transaction."""
+
     id: str
     type: TransactionType
     status: TransactionStatus
@@ -125,7 +127,7 @@ class TransactionHistory:
         """Load history from disk."""
         try:
             if HISTORY_FILE.exists():
-                with open(HISTORY_FILE, "r") as f:
+                with open(HISTORY_FILE) as f:
                     data = json.load(f)
                     self._transactions = [Transaction.from_dict(t) for t in data]
                 logger.debug(f"Loaded {len(self._transactions)} transactions from history")
@@ -145,6 +147,7 @@ class TransactionHistory:
     def _generate_id(self) -> str:
         """Generate a unique transaction ID."""
         import uuid
+
         return str(uuid.uuid4())[:8]
 
     def record(
@@ -301,9 +304,19 @@ class TransactionHistory:
             return 0
 
         fieldnames = [
-            "id", "type", "status", "timestamp", "amount",
-            "from_address", "to_address", "netuid", "wallet_name",
-            "validator_name", "command", "error", "tx_hash",
+            "id",
+            "type",
+            "status",
+            "timestamp",
+            "amount",
+            "from_address",
+            "to_address",
+            "netuid",
+            "wallet_name",
+            "validator_name",
+            "command",
+            "error",
+            "tx_hash",
         ]
 
         with open(filepath, "w", newline="") as f:
@@ -382,7 +395,9 @@ def show_history(
         )
 
     console.print(table)
-    console.print(f"\n[muted]Showing {len(transactions)} of {len(history._transactions)} total transactions[/muted]")
+    console.print(
+        f"\n[muted]Showing {len(transactions)} of {len(history._transactions)} total transactions[/muted]"
+    )
 
 
 # Global history instance

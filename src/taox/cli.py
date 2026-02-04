@@ -1,6 +1,7 @@
 """Main CLI entry point for taox."""
 
 import warnings
+
 # Suppress LibreSSL warning on macOS (harmless compatibility notice)
 warnings.filterwarnings("ignore", message="urllib3 v2 only supports OpenSSL")
 
@@ -9,44 +10,43 @@ import sys
 from typing import Optional
 
 import typer
-from rich.panel import Panel
 from rich import box
+from rich.panel import Panel
 
-from taox import __version__, __app_name__
-from taox.ui.console import console, print_welcome, print_error, print_success, print_info
-from taox.ui.theme import TaoxColors, Symbols
-from taox.ui.prompts import select_action, input_amount, input_netuid, confirm
-from taox.config.settings import get_settings, create_default_config, reset_settings_cache
-from taox.security.credentials import CredentialManager, setup_secure_logging
-from taox.chat.llm import LLMClient
+from taox import __app_name__, __version__
 from taox.chat.context import ConversationContext
-from taox.chat.intents import IntentType, parse_intent
+from taox.chat.intents import IntentType
+from taox.chat.llm import LLMClient
 from taox.chat.state_machine import (
     ConversationEngine,
-    ResponseAction,
-    IntentType as SMIntentType,
     ConversationState,
+    ResponseAction,
 )
-from taox.data.taostats import TaostatsClient
-from taox.data.sdk import BittensorSDK
-from taox.commands.executor import BtcliExecutor
-from taox.commands import wallet as wallet_cmds
-from taox.commands import stake as stake_cmds
-from taox.commands import subnet as subnet_cmds
+from taox.chat.state_machine import (
+    IntentType as SMIntentType,
+)
 from taox.commands import child as child_cmds
 from taox.commands import register as register_cmds
+from taox.commands import stake as stake_cmds
+from taox.commands import subnet as subnet_cmds
+from taox.commands import wallet as wallet_cmds
+from taox.commands.executor import BtcliExecutor
+from taox.config.settings import create_default_config, get_settings, reset_settings_cache
+from taox.data.sdk import BittensorSDK
+from taox.data.taostats import TaostatsClient
+from taox.security.credentials import CredentialManager, setup_secure_logging
+from taox.ui.console import console, print_error, print_success, print_welcome
 from taox.ui.onboarding import (
-    run_onboarding,
-    is_onboarding_needed,
-    show_welcome_banner,
-    show_commands_overview,
-    show_current_wallet,
     detect_wallets,
-    is_multi_wallet_mode,
-    prompt_wallet_selection,
     get_wallet_name,
+    is_multi_wallet_mode,
+    is_onboarding_needed,
+    run_onboarding,
+    show_commands_overview,
+    show_welcome_banner,
 )
-
+from taox.ui.prompts import confirm, input_amount, input_netuid
+from taox.ui.theme import Symbols
 
 # Create Typer app
 app = typer.Typer(
@@ -69,11 +69,17 @@ def version_callback(value: bool):
 def main_callback(
     ctx: typer.Context,
     version: bool = typer.Option(
-        None, "--version", "-v", callback=version_callback, is_eager=True,
+        None,
+        "--version",
+        "-v",
+        callback=version_callback,
+        is_eager=True,
         help="Show version and exit",
     ),
     demo: bool = typer.Option(
-        False, "--demo", help="Run in demo mode (no real API calls or transactions)",
+        False,
+        "--demo",
+        help="Run in demo mode (no real API calls or transactions)",
     ),
 ):
     """taox - AI-powered CLI for Bittensor."""
@@ -83,6 +89,7 @@ def main_callback(
     # Set demo mode if requested
     if demo:
         import os
+
         os.environ["TAOX_DEMO_MODE"] = "true"
         reset_settings_cache()
 
@@ -187,7 +194,9 @@ async def _chat_loop(initial_message: Optional[str] = None):
     print_welcome()
 
     if settings.demo_mode:
-        console.print("[warning]Running in demo mode - no real transactions will be executed[/warning]\n")
+        console.print(
+            "[warning]Running in demo mode - no real transactions will be executed[/warning]\n"
+        )
 
     if not llm.is_available:
         console.print("[muted]LLM not available - using pattern matching for commands[/muted]")
@@ -217,7 +226,10 @@ async def _chat_loop(initial_message: Optional[str] = None):
                 continue
 
             # Check for quit (only in IDLE state)
-            if user_input.lower() in ("quit", "exit", "q") and engine.state == ConversationState.IDLE:
+            if (
+                user_input.lower() in ("quit", "exit", "q")
+                and engine.state == ConversationState.IDLE
+            ):
                 console.print("[muted]Goodbye![/muted]")
                 break
 
@@ -293,7 +305,9 @@ async def _process_message(
                 wallet_name=intent.wallet_name,
                 dry_run=settings.demo_mode,
             )
-            assistant_response = f"Processed stake of {intent.amount} TAO on subnet {intent.netuid}."
+            assistant_response = (
+                f"Processed stake of {intent.amount} TAO on subnet {intent.netuid}."
+            )
 
         elif intent.type == IntentType.UNSTAKE:
             if intent.amount is None:
@@ -313,6 +327,7 @@ async def _process_message(
 
             if intent.destination is None:
                 from taox.ui.prompts import input_address
+
                 intent.destination = input_address("Destination address")
 
             await wallet_cmds.transfer_tao(
@@ -346,8 +361,12 @@ async def _process_message(
         elif intent.type == IntentType.GREETING:
             # Simple greeting response
             wallet = context.current_wallet or "your wallet"
-            console.print(f"[info]Hi! I'm ready to help with {wallet} on {context.current_network}.[/info]")
-            assistant_response = f"Greeted user. Wallet: {wallet}, Network: {context.current_network}"
+            console.print(
+                f"[info]Hi! I'm ready to help with {wallet} on {context.current_network}.[/info]"
+            )
+            assistant_response = (
+                f"Greeted user. Wallet: {wallet}, Network: {context.current_network}"
+            )
 
         elif intent.type == IntentType.CONFIRM:
             # User said yes/ok but there's nothing pending - just acknowledge
@@ -482,7 +501,9 @@ async def _execute_intent(
     elif intent.type == SMIntentType.UNSTAKE:
         amount = slots.amount or 0
         # Note: unstake requires more implementation work
-        console.print(f"[info]Would unstake {amount} τ from {slots.validator_name or slots.validator_ss58} on subnet {slots.netuid}[/info]")
+        console.print(
+            f"[info]Would unstake {amount} τ from {slots.validator_name or slots.validator_ss58} on subnet {slots.netuid}[/info]"
+        )
         console.print("[warning]Full unstake implementation pending[/warning]")
         return f"Unstake request for {amount} τ processed."
 
@@ -520,8 +541,10 @@ async def _execute_intent(
 
     elif intent.type == SMIntentType.GREETING:
         wallet = context.current_wallet or "your wallet"
-        console.print(f"[info]Hi! I'm ready to help with {wallet} on {context.current_network}.[/info]")
-        return f"Greeted user."
+        console.print(
+            f"[info]Hi! I'm ready to help with {wallet} on {context.current_network}.[/info]"
+        )
+        return "Greeted user."
 
     else:
         console.print(f"[muted]Intent: {intent}[/muted]")
@@ -574,7 +597,9 @@ def setup():
 
     existing_chutes = CredentialManager.get_chutes_key()
     if existing_chutes:
-        console.print(f"[success]Current key: {existing_chutes[:8]}...{existing_chutes[-4:]}[/success]")
+        console.print(
+            f"[success]Current key: {existing_chutes[:8]}...{existing_chutes[-4:]}[/success]"
+        )
         if not confirm("Update Chutes API key?"):
             console.print("[muted]Keeping existing key[/muted]\n")
         else:
@@ -583,7 +608,9 @@ def setup():
                 CredentialManager.set_chutes_key(chutes_key)
                 print_success("Chutes API key saved")
     else:
-        chutes_key = typer.prompt("Enter Chutes API key (or press Enter to skip)", default="", hide_input=True)
+        chutes_key = typer.prompt(
+            "Enter Chutes API key (or press Enter to skip)", default="", hide_input=True
+        )
         if chutes_key:
             CredentialManager.set_chutes_key(chutes_key)
             print_success("Chutes API key saved")
@@ -596,7 +623,9 @@ def setup():
 
     existing_taostats = CredentialManager.get_taostats_key()
     if existing_taostats:
-        console.print(f"[success]Current key: {existing_taostats[:8]}...{existing_taostats[-4:]}[/success]")
+        console.print(
+            f"[success]Current key: {existing_taostats[:8]}...{existing_taostats[-4:]}[/success]"
+        )
         if not confirm("Update Taostats API key?"):
             console.print("[muted]Keeping existing key[/muted]\n")
         else:
@@ -605,7 +634,9 @@ def setup():
                 CredentialManager.set_taostats_key(taostats_key)
                 print_success("Taostats API key saved")
     else:
-        taostats_key = typer.prompt("Enter Taostats API key (or press Enter to skip)", default="", hide_input=True)
+        taostats_key = typer.prompt(
+            "Enter Taostats API key (or press Enter to skip)", default="", hide_input=True
+        )
         if taostats_key:
             CredentialManager.set_taostats_key(taostats_key)
             print_success("Taostats API key saved")
@@ -671,6 +702,7 @@ def price():
     [green]Example:[/green]
         taox price
     """
+
     async def _show_price():
         taostats = TaostatsClient()
         with console.status("[bold green]Fetching TAO price..."):
@@ -681,7 +713,9 @@ def price():
 
         console.print()
         console.print(f"[bold]TAO Price:[/bold] [tao]${price_info.usd:,.2f}[/tao]")
-        console.print(f"[bold]24h Change:[/bold] [{change_color}]{change_symbol}{price_info.change_24h:.2f}%[/{change_color}]")
+        console.print(
+            f"[bold]24h Change:[/bold] [{change_color}]{change_symbol}{price_info.change_24h:.2f}%[/{change_color}]"
+        )
         console.print()
 
     asyncio.run(_show_price())
@@ -691,7 +725,9 @@ def price():
 def stake(
     wizard: bool = typer.Option(False, "--wizard", "-w", help="Launch interactive stake wizard"),
     amount: Optional[float] = typer.Option(None, "--amount", "-a", help="Amount to stake"),
-    validator: Optional[str] = typer.Option(None, "--validator", "-v", help="Validator name or hotkey"),
+    validator: Optional[str] = typer.Option(
+        None, "--validator", "-v", help="Validator name or hotkey"
+    ),
     netuid: Optional[int] = typer.Option(None, "--netuid", "-n", help="Subnet ID"),
     wallet_name: Optional[str] = typer.Option(None, "--wallet", help="Wallet name"),
 ):
@@ -718,15 +754,17 @@ def stake(
             netuid = 1
             console.print(f"[muted]Using default subnet: {netuid}[/muted]")
 
-        asyncio.run(stake_cmds.stake_tao(
-            executor=executor,
-            sdk=sdk,
-            taostats=taostats,
-            amount=amount,
-            validator_name=validator,
-            netuid=netuid,
-            wallet_name=wallet_name,
-        ))
+        asyncio.run(
+            stake_cmds.stake_tao(
+                executor=executor,
+                sdk=sdk,
+                taostats=taostats,
+                amount=amount,
+                validator_name=validator,
+                netuid=netuid,
+                wallet_name=wallet_name,
+            )
+        )
 
 
 @app.command()
@@ -788,14 +826,19 @@ def dashboard(
     """
     wallet_name = get_wallet_name(wallet_name)
     from taox.ui.dashboard import run_dashboard
+
     run_dashboard(wallet_name=wallet_name, refresh_interval=refresh)
 
 
 @app.command()
 def child(
     wizard: bool = typer.Option(False, "--wizard", "-w", help="Launch interactive wizard"),
-    action: Optional[str] = typer.Option(None, "--action", "-a", help="Action: get, set, revoke, take"),
-    child_hotkey: Optional[str] = typer.Option(None, "--child", "-c", help="Child hotkey SS58 address"),
+    action: Optional[str] = typer.Option(
+        None, "--action", "-a", help="Action: get, set, revoke, take"
+    ),
+    child_hotkey: Optional[str] = typer.Option(
+        None, "--child", "-c", help="Child hotkey SS58 address"
+    ),
     netuid: Optional[int] = typer.Option(None, "--netuid", "-n", help="Subnet ID"),
     proportion: float = typer.Option(1.0, "--proportion", "-p", help="Stake proportion (0-1)"),
     take: float = typer.Option(0.09, "--take", "-t", help="Take rate (0-0.18)"),
@@ -820,46 +863,54 @@ def child(
         if netuid is None:
             print_error("Subnet ID (--netuid) is required")
             return
-        asyncio.run(child_cmds.get_child_hotkeys(
-            executor=executor,
-            sdk=sdk,
-            netuid=netuid,
-            wallet_name=wallet_name,
-        ))
+        asyncio.run(
+            child_cmds.get_child_hotkeys(
+                executor=executor,
+                sdk=sdk,
+                netuid=netuid,
+                wallet_name=wallet_name,
+            )
+        )
     elif action == "set":
         if child_hotkey is None or netuid is None:
             print_error("Child hotkey (--child) and subnet ID (--netuid) are required")
             return
-        asyncio.run(child_cmds.set_child_hotkey(
-            executor=executor,
-            sdk=sdk,
-            child_hotkey=child_hotkey,
-            netuid=netuid,
-            proportion=proportion,
-            wallet_name=wallet_name,
-        ))
+        asyncio.run(
+            child_cmds.set_child_hotkey(
+                executor=executor,
+                sdk=sdk,
+                child_hotkey=child_hotkey,
+                netuid=netuid,
+                proportion=proportion,
+                wallet_name=wallet_name,
+            )
+        )
     elif action == "revoke":
         if child_hotkey is None or netuid is None:
             print_error("Child hotkey (--child) and subnet ID (--netuid) are required")
             return
-        asyncio.run(child_cmds.revoke_child_hotkey(
-            executor=executor,
-            sdk=sdk,
-            child_hotkey=child_hotkey,
-            netuid=netuid,
-            wallet_name=wallet_name,
-        ))
+        asyncio.run(
+            child_cmds.revoke_child_hotkey(
+                executor=executor,
+                sdk=sdk,
+                child_hotkey=child_hotkey,
+                netuid=netuid,
+                wallet_name=wallet_name,
+            )
+        )
     elif action == "take":
         if netuid is None:
             print_error("Subnet ID (--netuid) is required")
             return
-        asyncio.run(child_cmds.set_child_take(
-            executor=executor,
-            sdk=sdk,
-            netuid=netuid,
-            take=take,
-            wallet_name=wallet_name,
-        ))
+        asyncio.run(
+            child_cmds.set_child_take(
+                executor=executor,
+                sdk=sdk,
+                netuid=netuid,
+                take=take,
+                wallet_name=wallet_name,
+            )
+        )
     else:
         print_error(f"Unknown action: {action}. Use: get, set, revoke, take")
 
@@ -889,23 +940,27 @@ def register(
     if wizard or netuid is None:
         register_cmds.register_wizard(executor, sdk, taostats)
     elif method == "burn":
-        asyncio.run(register_cmds.register_burned(
-            executor=executor,
-            sdk=sdk,
-            taostats=taostats,
-            netuid=netuid,
-            wallet_name=wallet_name,
-            hotkey_name=hotkey_name,
-        ))
+        asyncio.run(
+            register_cmds.register_burned(
+                executor=executor,
+                sdk=sdk,
+                taostats=taostats,
+                netuid=netuid,
+                wallet_name=wallet_name,
+                hotkey_name=hotkey_name,
+            )
+        )
     elif method == "pow":
-        asyncio.run(register_cmds.register_pow(
-            executor=executor,
-            sdk=sdk,
-            netuid=netuid,
-            wallet_name=wallet_name,
-            hotkey_name=hotkey_name,
-            num_processes=num_processes,
-        ))
+        asyncio.run(
+            register_cmds.register_pow(
+                executor=executor,
+                sdk=sdk,
+                netuid=netuid,
+                wallet_name=wallet_name,
+                hotkey_name=hotkey_name,
+                num_processes=num_processes,
+            )
+        )
     else:
         print_error(f"Unknown method: {method}. Use: burn or pow")
 
@@ -913,9 +968,15 @@ def register(
 @app.command()
 def history(
     limit: int = typer.Option(20, "--limit", "-l", help="Number of transactions to show"),
-    tx_type: Optional[str] = typer.Option(None, "--type", "-t", help="Filter by type: stake, unstake, transfer, register"),
-    status: Optional[str] = typer.Option(None, "--status", "-s", help="Filter by status: success, failed, pending"),
-    export: Optional[str] = typer.Option(None, "--export", "-e", help="Export to file (json or csv)"),
+    tx_type: Optional[str] = typer.Option(
+        None, "--type", "-t", help="Filter by type: stake, unstake, transfer, register"
+    ),
+    status: Optional[str] = typer.Option(
+        None, "--status", "-s", help="Filter by status: success, failed, pending"
+    ),
+    export: Optional[str] = typer.Option(
+        None, "--export", "-e", help="Export to file (json or csv)"
+    ),
 ):
     """View transaction history.
 
@@ -929,8 +990,12 @@ def history(
         taox history --export transactions.json
     """
     from pathlib import Path
+
     from taox.data.history import (
-        show_history, TransactionHistory, TransactionType, TransactionStatus
+        TransactionHistory,
+        TransactionStatus,
+        TransactionType,
+        show_history,
     )
 
     # Parse filters
@@ -956,10 +1021,14 @@ def history(
         history_manager = TransactionHistory()
 
         if export.endswith(".json"):
-            count = history_manager.export_json(export_path, tx_type=tx_type_filter, status=status_filter, limit=limit)
+            count = history_manager.export_json(
+                export_path, tx_type=tx_type_filter, status=status_filter, limit=limit
+            )
             print_success(f"Exported {count} transactions to {export_path}")
         elif export.endswith(".csv"):
-            count = history_manager.export_csv(export_path, tx_type=tx_type_filter, status=status_filter, limit=limit)
+            count = history_manager.export_csv(
+                export_path, tx_type=tx_type_filter, status=status_filter, limit=limit
+            )
             print_success(f"Exported {count} transactions to {export_path}")
         else:
             print_error("Export file must end with .json or .csv")
@@ -971,7 +1040,9 @@ def history(
 
 @app.command()
 def doctor(
-    verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed dependency versions"),
+    verbose: bool = typer.Option(
+        False, "--verbose", "-v", help="Show detailed dependency versions"
+    ),
 ):
     """Check environment and diagnose issues.
 
@@ -986,11 +1057,13 @@ def doctor(
     from pathlib import Path
 
     console.print()
-    console.print(Panel(
-        f"[primary]taox[/primary] Environment Check",
-        box=box.ROUNDED,
-        border_style="primary",
-    ))
+    console.print(
+        Panel(
+            "[primary]taox[/primary] Environment Check",
+            box=box.ROUNDED,
+            border_style="primary",
+        )
+    )
     console.print()
 
     checks = []
@@ -998,12 +1071,9 @@ def doctor(
     errors = []
 
     # 1. Check Python version
-    import sys
+
     py_version = f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
-    if sys.version_info >= (3, 9):
-        checks.append(f"{Symbols.CHECK} Python version: {py_version}")
-    else:
-        errors.append(f"{Symbols.ERROR} Python version {py_version} (need >= 3.9)")
+    checks.append(f"{Symbols.CHECK} Python version: {py_version}")
 
     # 2. Check taox version
     checks.append(f"{Symbols.CHECK} taox version: {__version__}")
@@ -1013,13 +1083,12 @@ def doctor(
     if btcli_path:
         try:
             result = subprocess.run(
-                ["btcli", "--version"],
-                capture_output=True,
-                text=True,
-                timeout=10
+                ["btcli", "--version"], capture_output=True, text=True, timeout=10
             )
             btcli_version = result.stdout.strip() or result.stderr.strip()
-            checks.append(f"{Symbols.CHECK} btcli installed: {btcli_version.split()[-1] if btcli_version else 'unknown version'}")
+            checks.append(
+                f"{Symbols.CHECK} btcli installed: {btcli_version.split()[-1] if btcli_version else 'unknown version'}"
+            )
         except Exception:
             checks.append(f"{Symbols.CHECK} btcli installed: {btcli_path}")
     else:
@@ -1047,7 +1116,9 @@ def doctor(
                 if hotkey_path.exists():
                     checks.append(f"{Symbols.CHECK} Default hotkey '{default_hotkey}': exists")
                 else:
-                    warnings.append(f"{Symbols.WARN} Default hotkey '{default_hotkey}' not found in wallet '{default_wallet}'")
+                    warnings.append(
+                        f"{Symbols.WARN} Default hotkey '{default_hotkey}' not found in wallet '{default_wallet}'"
+                    )
             else:
                 warnings.append(f"{Symbols.WARN} Default wallet '{default_wallet}' not found")
         else:
@@ -1085,6 +1156,7 @@ def doctor(
     console.print("[muted]Checking network connectivity...[/muted]", end="\r")
     try:
         import httpx
+
         with httpx.Client(timeout=5.0) as client:
             response = client.post(
                 "https://entrypoint-finney.opentensor.ai:443",
@@ -1094,7 +1166,9 @@ def doctor(
             if response.status_code == 200:
                 checks.append(f"{Symbols.CHECK} Finney RPC endpoint: reachable")
             else:
-                warnings.append(f"{Symbols.WARN} Finney RPC endpoint: returned {response.status_code}")
+                warnings.append(
+                    f"{Symbols.WARN} Finney RPC endpoint: returned {response.status_code}"
+                )
     except Exception as e:
         warnings.append(f"{Symbols.WARN} Finney RPC endpoint: unreachable ({type(e).__name__})")
     console.print(" " * 40, end="\r")  # Clear the status line
@@ -1102,6 +1176,7 @@ def doctor(
     # 9. Check rate limit status (backoff manager)
     try:
         from taox.data.cache import backoff_manager
+
         active_backoffs = []
         for key in list(backoff_manager._failures.keys()):
             if not backoff_manager.should_retry(key):
@@ -1119,10 +1194,13 @@ def doctor(
     # 10. Check optional bittensor SDK
     try:
         import bittensor
+
         bt_version = getattr(bittensor, "__version__", "unknown")
         checks.append(f"{Symbols.CHECK} Bittensor SDK: {bt_version}")
     except ImportError:
-        warnings.append(f"{Symbols.WARN} Bittensor SDK: not installed (optional, install with: pip install bittensor)")
+        warnings.append(
+            f"{Symbols.WARN} Bittensor SDK: not installed (optional, install with: pip install bittensor)"
+        )
 
     # Display results
     console.print("[bold]Checks:[/bold]")
@@ -1169,7 +1247,9 @@ def doctor(
         console.print(f"[red]Found {len(errors)} error(s) that must be fixed.[/red]")
         raise typer.Exit(1)
     elif warnings:
-        console.print(f"[yellow]Found {len(warnings)} warning(s). taox will work but some features may be limited.[/yellow]")
+        console.print(
+            f"[yellow]Found {len(warnings)} warning(s). taox will work but some features may be limited.[/yellow]"
+        )
     else:
         console.print("[green]All checks passed! taox is ready to use.[/green]")
 

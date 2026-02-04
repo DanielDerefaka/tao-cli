@@ -1,16 +1,16 @@
 """Utility modules for taox."""
 
 from taox.utils.errors import (
-    TaoxError,
-    NetworkError,
     AuthenticationError,
+    BlockchainError,
+    NetworkError,
+    TaoxError,
     ValidationError,
     WalletError,
-    BlockchainError,
+    classify_error,
     handle_errors,
     retry_async,
     retry_sync,
-    classify_error,
 )
 
 __all__ = [

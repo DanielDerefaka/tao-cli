@@ -7,35 +7,34 @@ Tests cover:
 - BtcliExecutor: command building, validation, dry-run mode
 """
 
-import os
 import re
+from unittest.mock import MagicMock, patch
+
 import pytest
-from pathlib import Path
-from unittest.mock import MagicMock, patch, mock_open
 
 from taox.commands.executor import (
-    ExecutionStatus,
-    ExecutionMode,
-    CommandResult,
-    OutputParser,
-    SecureDebugLogger,
-    BtcliExecutor,
+    FAILURE_PATTERNS,
     PASSWORD_PATTERNS,
     SUCCESS_PATTERNS,
-    FAILURE_PATTERNS,
     TX_HASH_PATTERN,
-    build_stake_add_command,
-    build_stake_remove_command,
-    build_transfer_command,
+    BtcliExecutor,
+    CommandResult,
+    ExecutionMode,
+    ExecutionStatus,
+    OutputParser,
+    SecureDebugLogger,
     build_balance_command,
     build_metagraph_command,
     build_register_command,
+    build_stake_add_command,
+    build_stake_remove_command,
+    build_transfer_command,
 )
-
 
 # =============================================================================
 # OutputParser Tests
 # =============================================================================
+
 
 class TestOutputParserDetermineStatus:
     """Test OutputParser.determine_status with various btcli outputs."""
@@ -212,6 +211,7 @@ class TestOutputParserParseErrorMessage:
 # CommandResult Tests
 # =============================================================================
 
+
 class TestCommandResult:
     """Test CommandResult dataclass."""
 
@@ -307,6 +307,7 @@ class TestCommandResult:
 # SecureDebugLogger Tests
 # =============================================================================
 
+
 class TestSecureDebugLogger:
     """Test SecureDebugLogger password redaction."""
 
@@ -361,6 +362,7 @@ class TestSecureDebugLogger:
 # BtcliExecutor Tests
 # =============================================================================
 
+
 class TestBtcliExecutorCommandValidation:
     """Test command validation."""
 
@@ -398,9 +400,7 @@ class TestBtcliExecutorCommandBuilding:
         """Build command with arguments."""
         executor = BtcliExecutor(network="test")
         cmd = executor._build_command(
-            "wallet", "transfer",
-            args={"amount": 10.5, "dest": "5Abc123"},
-            flags=None
+            "wallet", "transfer", args={"amount": 10.5, "dest": "5Abc123"}, flags=None
         )
         assert "--amount" in cmd
         assert "10.5" in cmd
@@ -410,11 +410,7 @@ class TestBtcliExecutorCommandBuilding:
     def test_build_command_with_flags(self):
         """Build command with boolean flags."""
         executor = BtcliExecutor(network="finney")
-        cmd = executor._build_command(
-            "wallet", "balance",
-            args=None,
-            flags=["all", "json-output"]
-        )
+        cmd = executor._build_command("wallet", "balance", args=None, flags=["all", "json-output"])
         assert "--all" in cmd
         assert "--json-output" in cmd
 
@@ -422,9 +418,7 @@ class TestBtcliExecutorCommandBuilding:
         """Build command skips None argument values."""
         executor = BtcliExecutor()
         cmd = executor._build_command(
-            "wallet", "balance",
-            args={"wallet-name": None, "format": "table"},
-            flags=None
+            "wallet", "balance", args={"wallet-name": None, "format": "table"}, flags=None
         )
         assert "--wallet-name" not in cmd
         assert "--format" in cmd
@@ -436,10 +430,7 @@ class TestBtcliExecutorDryRun:
     def test_dry_run_mode_parameter(self):
         """Dry run via mode parameter."""
         executor = BtcliExecutor()
-        result = executor.execute(
-            "wallet", "balance",
-            mode=ExecutionMode.DRY_RUN
-        )
+        result = executor.execute("wallet", "balance", mode=ExecutionMode.DRY_RUN)
         assert result.status == ExecutionStatus.DRY_RUN
         assert result.success is True
         assert "[DRY RUN]" in result.stdout
@@ -447,20 +438,13 @@ class TestBtcliExecutorDryRun:
     def test_dry_run_flag_parameter(self):
         """Dry run via dry_run flag."""
         executor = BtcliExecutor()
-        result = executor.execute(
-            "wallet", "balance",
-            dry_run=True
-        )
+        result = executor.execute("wallet", "balance", dry_run=True)
         assert result.status == ExecutionStatus.DRY_RUN
 
     def test_dry_run_shows_command(self):
         """Dry run output shows the command."""
         executor = BtcliExecutor(network="finney")
-        result = executor.execute(
-            "stake", "add",
-            args={"amount": 10, "netuid": 1},
-            dry_run=True
-        )
+        result = executor.execute("stake", "add", args={"amount": 10, "netuid": 1}, dry_run=True)
         assert "btcli stake add" in result.stdout
         assert "--amount" in result.stdout
 
@@ -468,7 +452,7 @@ class TestBtcliExecutorDryRun:
 class TestBtcliExecutorDemoMode:
     """Test demo mode integration."""
 
-    @patch('taox.commands.executor.get_settings')
+    @patch("taox.commands.executor.get_settings")
     def test_demo_mode_returns_demo_status(self, mock_settings):
         """Demo mode returns DEMO_MODE status."""
         mock_settings.return_value.demo_mode = True
@@ -485,17 +469,14 @@ class TestBtcliExecutorDemoMode:
 # Command Builder Tests
 # =============================================================================
 
+
 class TestCommandBuilders:
     """Test command builder helper functions."""
 
     def test_build_stake_add_command(self):
         """Build stake add command."""
         cmd = build_stake_add_command(
-            amount=10.5,
-            hotkey="5Abc123",
-            netuid=1,
-            wallet_name="default",
-            safe_staking=True
+            amount=10.5, hotkey="5Abc123", netuid=1, wallet_name="default", safe_staking=True
         )
         assert cmd["group"] == "stake"
         assert cmd["subcommand"] == "add"
@@ -520,11 +501,7 @@ class TestCommandBuilders:
 
     def test_build_transfer_command(self):
         """Build transfer command."""
-        cmd = build_transfer_command(
-            amount=25.0,
-            destination="5Dest456",
-            wallet_name="mywallet"
-        )
+        cmd = build_transfer_command(amount=25.0, destination="5Dest456", wallet_name="mywallet")
         assert cmd["group"] == "wallet"
         assert cmd["subcommand"] == "transfer"
         assert cmd["args"]["amount"] == 25.0
@@ -548,11 +525,7 @@ class TestCommandBuilders:
 
     def test_build_register_command(self):
         """Build register command."""
-        cmd = build_register_command(
-            netuid=18,
-            wallet_name="myvalidator",
-            hotkey="miner1"
-        )
+        cmd = build_register_command(netuid=18, wallet_name="myvalidator", hotkey="miner1")
         assert cmd["group"] == "subnets"
         assert cmd["subcommand"] == "register"
         assert cmd["args"]["netuid"] == 18
@@ -564,86 +537,99 @@ class TestCommandBuilders:
 # Pattern Tests
 # =============================================================================
 
+
 class TestPasswordPatterns:
     """Test password detection patterns."""
 
-    @pytest.mark.parametrize("prompt", [
-        "Enter your coldkey password:",
-        "Enter the password to unlock your coldkey",
-        "Unlock your coldkey:",
-        "Decrypting coldkey...",
-        "Enter your hotkey password:",
-        "Unlock your hotkey:",
-        "Enter password:",
-        "Password:",
-        "password:",
-        "Enter the password to confirm:",
-    ])
+    @pytest.mark.parametrize(
+        "prompt",
+        [
+            "Enter your coldkey password:",
+            "Enter the password to unlock your coldkey",
+            "Unlock your coldkey:",
+            "Decrypting coldkey...",
+            "Enter your hotkey password:",
+            "Unlock your hotkey:",
+            "Enter password:",
+            "Password:",
+            "password:",
+            "Enter the password to confirm:",
+        ],
+    )
     def test_password_prompt_detected(self, prompt):
         """Each password pattern matches expected prompts."""
-        matched = any(
-            re.search(pattern, prompt, re.IGNORECASE)
-            for pattern in PASSWORD_PATTERNS
-        )
+        matched = any(re.search(pattern, prompt, re.IGNORECASE) for pattern in PASSWORD_PATTERNS)
         assert matched, f"Pattern should match: {prompt}"
 
 
 class TestSuccessPatterns:
     """Test success detection patterns."""
 
-    @pytest.mark.parametrize("output", [
-        "Transfer complete ✅",
-        "Success: Transaction finalized",
-        "Operation successful",
-        "Successfully staked 10 TAO",
-        "Finalized block #123456",
-        "Transaction submitted to network",
-        "Extrinsic submitted",
-        "Block hash: 0xabc123",
-    ])
+    @pytest.mark.parametrize(
+        "output",
+        [
+            "Transfer complete ✅",
+            "Success: Transaction finalized",
+            "Operation successful",
+            "Successfully staked 10 TAO",
+            "Finalized block #123456",
+            "Transaction submitted to network",
+            "Extrinsic submitted",
+            "Block hash: 0xabc123",
+        ],
+    )
     def test_success_indicator_detected(self, output):
         """Each success pattern matches expected output."""
-        matched = any(
-            re.search(pattern, output, re.IGNORECASE)
-            for pattern in SUCCESS_PATTERNS
-        )
+        matched = any(re.search(pattern, output, re.IGNORECASE) for pattern in SUCCESS_PATTERNS)
         assert matched, f"Pattern should match: {output}"
 
 
 class TestFailurePatterns:
     """Test failure detection patterns."""
 
-    @pytest.mark.parametrize("output", [
-        "Transaction failed ❌",
-        "Error: Something went wrong",
-        "error connecting to node",
-        "Failed to submit extrinsic",
-        "Failure: Invalid signature",
-        "Insufficient balance",
-        "Address not found",
-        "Invalid netuid specified",
-        "Permission denied",
-        "Request rejected by validator",
-        "Operation cancelled",
-        "Abort: User cancelled",
-    ])
+    @pytest.mark.parametrize(
+        "output",
+        [
+            "Transaction failed ❌",
+            "Error: Something went wrong",
+            "error connecting to node",
+            "Failed to submit extrinsic",
+            "Failure: Invalid signature",
+            "Insufficient balance",
+            "Address not found",
+            "Invalid netuid specified",
+            "Permission denied",
+            "Request rejected by validator",
+            "Operation cancelled",
+            "Abort: User cancelled",
+        ],
+    )
     def test_failure_indicator_detected(self, output):
         """Each failure pattern matches expected output."""
-        matched = any(
-            re.search(pattern, output, re.IGNORECASE)
-            for pattern in FAILURE_PATTERNS
-        )
+        matched = any(re.search(pattern, output, re.IGNORECASE) for pattern in FAILURE_PATTERNS)
         assert matched, f"Pattern should match: {output}"
 
 
 class TestTxHashPattern:
     """Test transaction hash pattern."""
 
-    @pytest.mark.parametrize("text,expected", [
-        ("0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890", "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890"),
-        ("Hash: abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890", "abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890"),
-        ("Block 0xAAAABBBBCCCCDDDD1111222233334444555566667777888899990000AAAABBBB", "0xAAAABBBBCCCCDDDD1111222233334444555566667777888899990000AAAABBBB"),
-    ])
+    @pytest.mark.parametrize(
+        "text,expected",
+        [
+            (
+                "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+                "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+            ),
+            (
+                "Hash: abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+                "abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+            ),
+            (
+                "Block 0xAAAABBBBCCCCDDDD1111222233334444555566667777888899990000AAAABBBB",
+                "0xAAAABBBBCCCCDDDD1111222233334444555566667777888899990000AAAABBBB",
+            ),
+        ],
+    )
     def test_tx_hash_extracted(self, text, expected):
         """TX hash pattern extracts correct hash."""
         match = TX_HASH_PATTERN.search(text)
@@ -660,89 +646,71 @@ class TestTxHashPattern:
 # Integration-style Mock Tests
 # =============================================================================
 
+
 class TestExecutorWithMockedBtcli:
     """Test executor with mocked subprocess calls."""
 
-    @patch('subprocess.run')
+    @patch("subprocess.run")
     def test_normal_execution_success(self, mock_run):
         """Normal execution parses successful output."""
-        mock_run.return_value = MagicMock(
-            stdout="Balance: 100.5 TAO ✅",
-            stderr="",
-            returncode=0
-        )
+        mock_run.return_value = MagicMock(stdout="Balance: 100.5 TAO ✅", stderr="", returncode=0)
 
         executor = BtcliExecutor()
-        result = executor.execute(
-            "wallet", "balance",
-            mode=ExecutionMode.NORMAL
-        )
+        result = executor.execute("wallet", "balance", mode=ExecutionMode.NORMAL)
 
         assert result.status == ExecutionStatus.SUCCESS
         assert "100.5 TAO" in result.stdout
 
-    @patch('subprocess.run')
+    @patch("subprocess.run")
     def test_normal_execution_failure(self, mock_run):
         """Normal execution detects failure."""
-        mock_run.return_value = MagicMock(
-            stdout="",
-            stderr="Error: Wallet not found",
-            returncode=1
-        )
+        mock_run.return_value = MagicMock(stdout="", stderr="Error: Wallet not found", returncode=1)
 
         executor = BtcliExecutor()
-        result = executor.execute(
-            "wallet", "balance",
-            mode=ExecutionMode.NORMAL
-        )
+        result = executor.execute("wallet", "balance", mode=ExecutionMode.NORMAL)
 
         assert result.status == ExecutionStatus.FAILED
         assert result.error_message is not None
 
-    @patch('subprocess.run')
+    @patch("subprocess.run")
     def test_normal_execution_extracts_tx_hash(self, mock_run):
         """Normal execution extracts transaction hash."""
         mock_run.return_value = MagicMock(
             stdout="Transfer complete!\nBlock hash: 0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890\n✅",
             stderr="",
-            returncode=0
+            returncode=0,
         )
 
         executor = BtcliExecutor()
         result = executor.execute(
-            "wallet", "transfer",
-            args={"amount": 10, "dest": "5Abc"},
-            mode=ExecutionMode.NORMAL
+            "wallet", "transfer", args={"amount": 10, "dest": "5Abc"}, mode=ExecutionMode.NORMAL
         )
 
         assert result.status == ExecutionStatus.SUCCESS
-        assert result.tx_hash == "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890"
+        assert (
+            result.tx_hash == "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890"
+        )
 
-    @patch('subprocess.run')
+    @patch("subprocess.run")
     def test_timeout_handling(self, mock_run):
         """Timeout is handled gracefully."""
         import subprocess
+
         mock_run.side_effect = subprocess.TimeoutExpired(cmd=["btcli"], timeout=120)
 
         executor = BtcliExecutor(timeout=120)
-        result = executor.execute(
-            "wallet", "balance",
-            mode=ExecutionMode.NORMAL
-        )
+        result = executor.execute("wallet", "balance", mode=ExecutionMode.NORMAL)
 
         assert result.status == ExecutionStatus.TIMEOUT
         assert "timed out" in result.error_message.lower()
 
-    @patch('subprocess.run')
+    @patch("subprocess.run")
     def test_btcli_not_found(self, mock_run):
         """Missing btcli handled gracefully."""
         mock_run.side_effect = FileNotFoundError("btcli not found")
 
         executor = BtcliExecutor()
-        result = executor.execute(
-            "wallet", "balance",
-            mode=ExecutionMode.NORMAL
-        )
+        result = executor.execute("wallet", "balance", mode=ExecutionMode.NORMAL)
 
         assert result.status == ExecutionStatus.FAILED
         assert "not found" in result.error_message.lower()

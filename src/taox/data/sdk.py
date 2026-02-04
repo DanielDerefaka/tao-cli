@@ -1,12 +1,11 @@
 """Bittensor SDK wrapper for taox."""
 
 import logging
-from typing import Optional
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Optional
 
 from taox.config.settings import get_settings
-
 
 logger = logging.getLogger(__name__)
 
@@ -14,11 +13,11 @@ logger = logging.getLogger(__name__)
 # Try to import bittensor - may not be installed
 try:
     import bittensor as bt
-    from bittensor.core.subtensor import Subtensor
     from bittensor.core.async_subtensor import AsyncSubtensor
     from bittensor.core.metagraph import Metagraph
+    from bittensor.core.subtensor import Subtensor
+    from bittensor.utils.balance import Balance, rao, tao
     from bittensor_wallet import Wallet
-    from bittensor.utils.balance import Balance, tao, rao
 
     BITTENSOR_AVAILABLE = True
 except ImportError:
@@ -93,8 +92,8 @@ class BittensorSDK:
         """
         self.settings = get_settings()
         self.network = network or self.settings.bittensor.network
-        self._subtensor: Optional["Subtensor"] = None
-        self._async_subtensor: Optional["AsyncSubtensor"] = None
+        self._subtensor: Optional[Subtensor] = None
+        self._async_subtensor: Optional[AsyncSubtensor] = None
 
     @property
     def is_available(self) -> bool:
@@ -137,7 +136,7 @@ class BittensorSDK:
                 continue
 
             try:
-                wallet = Wallet(name=wallet_dir.name, path=str(wallet_path))
+                Wallet(name=wallet_dir.name, path=str(wallet_path))
 
                 # Get hotkeys
                 hotkeys_dir = wallet_dir / "hotkeys"
@@ -164,7 +163,9 @@ class BittensorSDK:
 
         return wallets
 
-    def get_wallet(self, name: Optional[str] = None, hotkey: Optional[str] = None) -> Optional["Wallet"]:
+    def get_wallet(
+        self, name: Optional[str] = None, hotkey: Optional[str] = None
+    ) -> Optional["Wallet"]:
         """Get a wallet by name.
 
         Args:

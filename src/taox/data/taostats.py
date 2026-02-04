@@ -8,30 +8,25 @@ This module provides the Taostats API client with:
 """
 
 import logging
-from typing import Optional, Tuple
 from dataclasses import dataclass
+from typing import Optional
 
 import httpx
 
 from taox.config.settings import get_settings
-from taox.security.credentials import CredentialManager
 from taox.data.cache import (
-    validator_cache,
-    subnet_cache,
-    price_cache,
-    persistent_validator_cache,
-    persistent_subnet_cache,
-    persistent_price_cache,
     backoff_manager,
-    CacheStatus,
+    persistent_price_cache,
+    persistent_validator_cache,
+    price_cache,
+    validator_cache,
 )
 from taox.data.sources import (
     DataSource,
     GroundedData,
-    SourceAttribution,
     get_data_grounder,
 )
-
+from taox.security.credentials import CredentialManager
 
 logger = logging.getLogger(__name__)
 
@@ -127,17 +122,79 @@ MOCK_VALIDATORS = [
 ]
 
 MOCK_SUBNETS = [
-    Subnet(netuid=0, name="Root", emission=0.0, tempo=100, difficulty=0, burn_cost=0, total_stake=10000000, validators=64),
-    Subnet(netuid=1, name="Text Prompting", emission=0.15, tempo=360, difficulty=1000000, burn_cost=1.5, total_stake=5000000, validators=256),
-    Subnet(netuid=3, name="Data Scraping", emission=0.08, tempo=360, difficulty=500000, burn_cost=0.8, total_stake=2000000, validators=128),
-    Subnet(netuid=8, name="Time Series", emission=0.05, tempo=360, difficulty=300000, burn_cost=0.5, total_stake=1500000, validators=96),
-    Subnet(netuid=18, name="Cortex.t", emission=0.10, tempo=360, difficulty=800000, burn_cost=1.2, total_stake=3000000, validators=200),
-    Subnet(netuid=19, name="Vision", emission=0.07, tempo=360, difficulty=600000, burn_cost=0.9, total_stake=2500000, validators=150),
-    Subnet(netuid=64, name="Chutes", emission=0.12, tempo=360, difficulty=900000, burn_cost=1.4, total_stake=4000000, validators=180),
+    Subnet(
+        netuid=0,
+        name="Root",
+        emission=0.0,
+        tempo=100,
+        difficulty=0,
+        burn_cost=0,
+        total_stake=10000000,
+        validators=64,
+    ),
+    Subnet(
+        netuid=1,
+        name="Text Prompting",
+        emission=0.15,
+        tempo=360,
+        difficulty=1000000,
+        burn_cost=1.5,
+        total_stake=5000000,
+        validators=256,
+    ),
+    Subnet(
+        netuid=3,
+        name="Data Scraping",
+        emission=0.08,
+        tempo=360,
+        difficulty=500000,
+        burn_cost=0.8,
+        total_stake=2000000,
+        validators=128,
+    ),
+    Subnet(
+        netuid=8,
+        name="Time Series",
+        emission=0.05,
+        tempo=360,
+        difficulty=300000,
+        burn_cost=0.5,
+        total_stake=1500000,
+        validators=96,
+    ),
+    Subnet(
+        netuid=18,
+        name="Cortex.t",
+        emission=0.10,
+        tempo=360,
+        difficulty=800000,
+        burn_cost=1.2,
+        total_stake=3000000,
+        validators=200,
+    ),
+    Subnet(
+        netuid=19,
+        name="Vision",
+        emission=0.07,
+        tempo=360,
+        difficulty=600000,
+        burn_cost=0.9,
+        total_stake=2500000,
+        validators=150,
+    ),
+    Subnet(
+        netuid=64,
+        name="Chutes",
+        emission=0.12,
+        tempo=360,
+        difficulty=900000,
+        burn_cost=1.4,
+        total_stake=4000000,
+        validators=180,
+    ),
 ]
 
 MOCK_PRICE = PriceInfo(usd=450.0, change_24h=2.5)
-
 
 
 class TaostatsClient:
@@ -249,7 +306,9 @@ class TaostatsClient:
             validators = MOCK_VALIDATORS
             if netuid is not None:
                 validators = [v for v in validators if v.netuid == netuid]
-            result = self._grounder.ground(validators[:limit], DataSource.MOCK_DATA, is_fallback=True)
+            result = self._grounder.ground(
+                validators[:limit], DataSource.MOCK_DATA, is_fallback=True
+            )
             result.add_assumption("Using sample data - no API key configured")
             return result
 
@@ -277,7 +336,11 @@ class TaostatsClient:
             validators = []
             for item in data.get("data", []):
                 hotkey_data = item.get("hotkey", {})
-                hotkey = hotkey_data.get("ss58", "") if isinstance(hotkey_data, dict) else str(hotkey_data)
+                hotkey = (
+                    hotkey_data.get("ss58", "")
+                    if isinstance(hotkey_data, dict)
+                    else str(hotkey_data)
+                )
 
                 stake_rao = float(item.get("global_weighted_stake", item.get("stake", 0)))
                 stake_tao = stake_rao / 1e9 if stake_rao > 1e12 else stake_rao
@@ -337,7 +400,9 @@ class TaostatsClient:
             result.add_assumption("API request failed - showing sample validators")
             return result
 
-    async def search_validator(self, name: str, netuid: Optional[int] = None) -> Optional[Validator]:
+    async def search_validator(
+        self, name: str, netuid: Optional[int] = None
+    ) -> Optional[Validator]:
         """Search for a validator by name using fuzzy matching.
 
         Args:
@@ -536,7 +601,11 @@ class TaostatsClient:
             if cache_result.value is not None:
                 source = DataSource.CACHE_FRESH if cache_result.is_fresh else DataSource.CACHE_STALE
                 return self._grounder.ground(
-                    PriceInfo(**cache_result.value) if isinstance(cache_result.value, dict) else cache_result.value,
+                    (
+                        PriceInfo(**cache_result.value)
+                        if isinstance(cache_result.value, dict)
+                        else cache_result.value
+                    ),
                     source,
                     cache_age=cache_result.age_seconds,
                     is_fallback=cache_result.is_stale,
@@ -553,7 +622,11 @@ class TaostatsClient:
             cache_result = persistent_price_cache.get_with_metadata(cache_key)
             if cache_result.value is not None:
                 return self._grounder.ground(
-                    PriceInfo(**cache_result.value) if isinstance(cache_result.value, dict) else cache_result.value,
+                    (
+                        PriceInfo(**cache_result.value)
+                        if isinstance(cache_result.value, dict)
+                        else cache_result.value
+                    ),
                     DataSource.CACHE_STALE,
                     cache_age=cache_result.age_seconds,
                     is_fallback=True,
@@ -582,7 +655,7 @@ class TaostatsClient:
             persistent_price_cache.set_with_source(
                 cache_key,
                 {"usd": price_info.usd, "change_24h": price_info.change_24h},
-                "taostats_api"
+                "taostats_api",
             )
             backoff_manager.record_success(cache_key)
 
@@ -600,7 +673,11 @@ class TaostatsClient:
             cache_result = persistent_price_cache.get_with_metadata(cache_key)
             if cache_result.value is not None:
                 return self._grounder.ground(
-                    PriceInfo(**cache_result.value) if isinstance(cache_result.value, dict) else cache_result.value,
+                    (
+                        PriceInfo(**cache_result.value)
+                        if isinstance(cache_result.value, dict)
+                        else cache_result.value
+                    ),
                     DataSource.CACHE_STALE,
                     cache_age=cache_result.age_seconds,
                     is_fallback=True,
@@ -630,9 +707,24 @@ class TaostatsClient:
             return {
                 "total_stake": 500.0,
                 "positions": [
-                    {"netuid": 1, "hotkey": MOCK_VALIDATORS[0].hotkey, "stake": 200.0, "alpha_balance": 180.5},
-                    {"netuid": 18, "hotkey": MOCK_VALIDATORS[1].hotkey, "stake": 150.0, "alpha_balance": 145.2},
-                    {"netuid": 64, "hotkey": MOCK_VALIDATORS[2].hotkey, "stake": 150.0, "alpha_balance": 160.8},
+                    {
+                        "netuid": 1,
+                        "hotkey": MOCK_VALIDATORS[0].hotkey,
+                        "stake": 200.0,
+                        "alpha_balance": 180.5,
+                    },
+                    {
+                        "netuid": 18,
+                        "hotkey": MOCK_VALIDATORS[1].hotkey,
+                        "stake": 150.0,
+                        "alpha_balance": 145.2,
+                    },
+                    {
+                        "netuid": 64,
+                        "hotkey": MOCK_VALIDATORS[2].hotkey,
+                        "stake": 150.0,
+                        "alpha_balance": 160.8,
+                    },
                 ],
             }
 
@@ -664,7 +756,11 @@ class TaostatsClient:
 
                 # Get hotkey info
                 hotkey_data = item.get("hotkey", {})
-                hotkey_ss58 = hotkey_data.get("ss58", "") if isinstance(hotkey_data, dict) else str(hotkey_data)
+                hotkey_ss58 = (
+                    hotkey_data.get("ss58", "")
+                    if isinstance(hotkey_data, dict)
+                    else str(hotkey_data)
+                )
 
                 position = {
                     "netuid": item.get("netuid", 0),

@@ -90,7 +90,16 @@ target-version = "py39"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM"]
-ignore = ["E501"]  # Line length handled by formatter
+ignore = [
+    "E501",   # Line length handled by formatter
+    "E402",   # Module level import not at top (needed for warnings filter)
+    "B008",   # Function call in argument defaults (Typer pattern)
+    "E722",   # Bare except (sometimes needed for catch-all)
+    "SIM102", # Nested if (sometimes clearer than combined)
+]
+
+[tool.ruff.lint.per-file-ignores]
+"src/taox/data/sdk.py" = ["F401"]  # Unused imports for optional bittensor
 
 [tool.mypy]
 python_version = "3.9"

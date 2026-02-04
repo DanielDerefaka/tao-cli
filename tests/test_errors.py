@@ -1,17 +1,18 @@
 """Tests for error handling utilities."""
 
-import pytest
+from unittest.mock import MagicMock
+
 import httpx
-from unittest.mock import MagicMock, AsyncMock
+import pytest
 
 from taox.utils.errors import (
-    TaoxError,
-    NetworkError,
     AuthenticationError,
-    ValidationError,
-    WalletError,
     BlockchainError,
     ErrorCategory,
+    NetworkError,
+    TaoxError,
+    ValidationError,
+    WalletError,
     classify_error,
     handle_errors,
     retry_async,
@@ -141,6 +142,7 @@ class TestHandleErrorsDecorator:
 
     def test_successful_function(self):
         """Test decorator on successful function."""
+
         @handle_errors(fallback="fallback")
         def success_func():
             return "success"
@@ -150,6 +152,7 @@ class TestHandleErrorsDecorator:
 
     def test_function_with_error_returns_fallback(self):
         """Test decorator returns fallback on error."""
+
         @handle_errors(fallback="fallback", show_error=False)
         def failing_func():
             raise ValueError("Error!")
@@ -159,6 +162,7 @@ class TestHandleErrorsDecorator:
 
     def test_function_with_taox_error(self):
         """Test decorator handles TaoxError."""
+
         @handle_errors(fallback=None, show_error=False)
         def taox_error_func():
             raise NetworkError("Network down")
@@ -168,6 +172,7 @@ class TestHandleErrorsDecorator:
 
     def test_reraise_option(self):
         """Test reraise option."""
+
         @handle_errors(reraise=True, show_error=False)
         def failing_func():
             raise ValueError("Error!")
@@ -182,6 +187,7 @@ class TestHandleErrorsAsyncDecorator:
 
     async def test_successful_async_function(self):
         """Test decorator on successful async function."""
+
         @handle_errors(fallback="fallback")
         async def success_func():
             return "success"
@@ -191,6 +197,7 @@ class TestHandleErrorsAsyncDecorator:
 
     async def test_async_function_with_error(self):
         """Test decorator returns fallback on async error."""
+
         @handle_errors(fallback="fallback", show_error=False)
         async def failing_func():
             raise ValueError("Error!")
@@ -232,6 +239,7 @@ class TestRetrySync:
 
     def test_max_attempts_exceeded(self):
         """Test raises after max attempts."""
+
         def always_fails():
             raise ValueError("Always fails")
 
@@ -292,6 +300,7 @@ class TestRetryAsync:
 
     async def test_async_max_attempts_exceeded(self):
         """Test async raises after max attempts."""
+
         async def always_fails():
             raise ValueError("Always fails")
 

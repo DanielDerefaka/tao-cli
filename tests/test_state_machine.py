@@ -1,20 +1,17 @@
 """Tests for the conversation state machine."""
 
-import pytest
-from pathlib import Path
-from unittest.mock import patch, MagicMock
 
 from taox.chat.state_machine import (
-    IntentType,
-    SlotType,
-    FilledSlots,
-    ParsedIntent,
-    UserPreferences,
-    ConversationState,
-    ConversationEngine,
-    ResponseAction,
-    ConversationResponse,
     INTENT_SLOTS,
+    ConversationEngine,
+    ConversationResponse,
+    ConversationState,
+    FilledSlots,
+    IntentType,
+    ParsedIntent,
+    ResponseAction,
+    SlotType,
+    UserPreferences,
 )
 
 
@@ -157,7 +154,7 @@ class TestConversationEngineSlotFilling:
         """Slot-filling accepts user answer."""
         engine = ConversationEngine()
         # Start stake with only amount
-        response1 = engine.process_input("stake 10 TAO")
+        engine.process_input("stake 10 TAO")
         assert engine.state == ConversationState.SLOT_FILLING
 
         # Provide validator

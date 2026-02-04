@@ -1,10 +1,11 @@
 """Credential management using system keyring."""
 
-from typing import Optional
 import logging
+from typing import Optional
 
 try:
     import keyring
+
     KEYRING_AVAILABLE = True
 except ImportError:
     KEYRING_AVAILABLE = False
@@ -51,9 +52,7 @@ class CredentialManager:
     def _check_keyring(cls) -> None:
         """Check if keyring is available."""
         if not KEYRING_AVAILABLE:
-            raise RuntimeError(
-                "keyring package not installed. Install with: pip install keyring"
-            )
+            raise RuntimeError("keyring package not installed. Install with: pip install keyring")
 
     @classmethod
     def store(cls, key_name: str, value: str) -> bool:

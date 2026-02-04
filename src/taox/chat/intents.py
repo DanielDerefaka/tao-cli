@@ -1,9 +1,10 @@
 """Intent classification and entity extraction for taox."""
 
+import contextlib
 import re
+from dataclasses import dataclass, field
 from enum import Enum
 from typing import Optional
-from dataclasses import dataclass, field
 
 
 class IntentType(str, Enum):
@@ -202,35 +203,20 @@ class MockIntentParser:
 
                     if intent_type == IntentType.STAKE and groups:
                         if groups[0]:
-                            try:
+                            with contextlib.suppress(ValueError):
                                 intent.amount = float(groups[0])
-                            except ValueError:
-                                pass
                         if len(groups) > 1 and groups[1]:
                             intent.validator_name = groups[1].strip()
                         if len(groups) > 2 and groups[2]:
                             intent.netuid = int(groups[2])
 
-                    elif intent_type == IntentType.UNSTAKE and groups:
+                    elif intent_type == IntentType.UNSTAKE and groups or intent_type == IntentType.TRANSFER and groups:
                         if groups[0]:
-                            try:
+                            with contextlib.suppress(ValueError):
                                 intent.amount = float(groups[0])
-                            except ValueError:
-                                pass
-
-                    elif intent_type == IntentType.TRANSFER and groups:
-                        if groups[0]:
-                            try:
-                                intent.amount = float(groups[0])
-                            except ValueError:
-                                pass
                         # destination already extracted from SS58_PATTERN above
 
-                    elif intent_type in (IntentType.METAGRAPH, IntentType.VALIDATORS):
-                        if groups and groups[0]:
-                            intent.netuid = int(groups[0])
-
-                    elif intent_type == IntentType.REGISTER:
+                    elif intent_type in (IntentType.METAGRAPH, IntentType.VALIDATORS) or intent_type == IntentType.REGISTER:
                         if groups and groups[0]:
                             intent.netuid = int(groups[0])
 

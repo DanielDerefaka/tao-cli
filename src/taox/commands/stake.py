@@ -1,20 +1,28 @@
 """Staking operations for taox."""
 
 from typing import Optional
-from rich.table import Table
-from rich import box
 
-from taox.ui.console import console, format_tao, format_address, format_alpha, print_success, print_error
-from taox.ui.theme import TaoxColors
-from taox.data.sdk import BittensorSDK
-from taox.data.taostats import TaostatsClient, Validator
+from rich import box
+from rich.table import Table
+
 from taox.commands.executor import (
     BtcliExecutor,
     build_stake_add_command,
     build_stake_remove_command,
 )
-from taox.security.confirm import confirm_transaction
 from taox.config.settings import get_settings
+from taox.data.sdk import BittensorSDK
+from taox.data.taostats import TaostatsClient, Validator
+from taox.security.confirm import confirm_transaction
+from taox.ui.console import (
+    console,
+    format_address,
+    format_alpha,
+    format_tao,
+    print_error,
+    print_success,
+)
+from taox.ui.theme import TaoxColors
 
 
 async def show_validators(
@@ -39,7 +47,7 @@ async def show_validators(
         console.print("[muted]No validators found.[/muted]")
         return []
 
-    title = f"Top Validators"
+    title = "Top Validators"
     if netuid is not None:
         title += f" (Subnet {netuid})"
 
@@ -307,6 +315,7 @@ async def show_portfolio(
         Portfolio data dict
     """
     from rich.panel import Panel
+
     from taox.ui.theme import Symbols
 
     settings = get_settings()
@@ -412,14 +421,20 @@ async def show_portfolio(
             alpha_balance = pos.get("alpha_balance", 0)
             total_alpha += alpha_balance
 
-            subnet_name = subnet_names.get(netuid, f"SN{netuid}")
-            validator_name = pos.get("hotkey_name") or validator_names.get(hotkey) or format_address(hotkey)
+            subnet_names.get(netuid, f"SN{netuid}")
+            validator_name = (
+                pos.get("hotkey_name") or validator_names.get(hotkey) or format_address(hotkey)
+            )
             usd_value = stake * usd_price
             share = (stake / staked_total * 100) if staked_total > 0 else 0
 
             pos_table.add_row(
                 f"SN{netuid}",
-                validator_name[:20] + "..." if len(str(validator_name)) > 20 else str(validator_name),
+                (
+                    validator_name[:20] + "..."
+                    if len(str(validator_name)) > 20
+                    else str(validator_name)
+                ),
                 f"{stake:,.4f} τ",
                 f"{alpha_balance:,.4f} α",
                 f"${usd_value:,.2f}",
@@ -473,19 +488,23 @@ def stake_wizard(
         True if stake was successful
     """
     import asyncio
-    from rich.panel import Panel
+
     from InquirerPy import inquirer
     from InquirerPy.base.control import Choice
+    from rich.panel import Panel
+
     from taox.ui.theme import Symbols
 
     settings = get_settings()
 
-    console.print(Panel(
-        "[bold]Welcome to the Stake Wizard![/bold]\n\n"
-        "This wizard will guide you through staking TAO to a validator.",
-        title="[primary]Stake Wizard[/primary]",
-        box=box.ROUNDED
-    ))
+    console.print(
+        Panel(
+            "[bold]Welcome to the Stake Wizard![/bold]\n\n"
+            "This wizard will guide you through staking TAO to a validator.",
+            title="[primary]Stake Wizard[/primary]",
+            box=box.ROUNDED,
+        )
+    )
     console.print()
 
     # Step 1: Select wallet
@@ -497,8 +516,7 @@ def stake_wizard(
         return False
 
     wallet_choices = [
-        Choice(value=w.name, name=f"{w.name} ({format_address(w.coldkey_ss58)})")
-        for w in wallets
+        Choice(value=w.name, name=f"{w.name} ({format_address(w.coldkey_ss58)})") for w in wallets
     ]
 
     wallet_name = inquirer.select(
@@ -530,7 +548,7 @@ def stake_wizard(
     subnet_choices = [
         Choice(
             value=s.netuid,
-            name=f"SN{s.netuid} - {s.name or 'Unknown'} ({s.emission * 100:.1f}% emission)"
+            name=f"SN{s.netuid} - {s.name or 'Unknown'} ({s.emission * 100:.1f}% emission)",
         )
         for s in sorted(subnets, key=lambda x: x.emission, reverse=True)
         if s.netuid > 0  # Exclude root
@@ -563,7 +581,9 @@ def stake_wizard(
         ).execute()
 
         with console.status(f"[bold green]Searching for '{search_query}'..."):
-            validators = asyncio.run(taostats.search_validators(search_query, netuid=netuid, limit=10))
+            validators = asyncio.run(
+                taostats.search_validators(search_query, netuid=netuid, limit=10)
+            )
 
         if not validators:
             console.print("[warning]No validators found. Showing top validators instead.[/warning]")
@@ -579,7 +599,7 @@ def stake_wizard(
     validator_choices = [
         Choice(
             value=v.hotkey,
-            name=f"{v.name or 'Unknown'} - {v.stake:,.0f}τ stake, {v.take * 100:.1f}% take"
+            name=f"{v.name or 'Unknown'} - {v.stake:,.0f}τ stake, {v.take * 100:.1f}% take",
         )
         for v in validators
     ]
@@ -614,12 +634,14 @@ def stake_wizard(
     ).execute()
 
     if amount_choice == "custom":
-        amount = float(inquirer.number(
-            message="Enter amount (TAO):",
-            float_allowed=True,
-            min_allowed=0.0005,
-            max_allowed=float(balance.free - 0.01),
-        ).execute())
+        amount = float(
+            inquirer.number(
+                message="Enter amount (TAO):",
+                float_allowed=True,
+                min_allowed=0.0005,
+                max_allowed=float(balance.free - 0.01),
+            ).execute()
+        )
     elif amount_choice == "max":
         amount = balance.free - 0.1  # Keep some for gas
     else:
@@ -637,14 +659,16 @@ def stake_wizard(
     ).execute()
 
     # Execute stake (run async in sync context)
-    return asyncio.run(stake_tao(
-        executor=executor,
-        sdk=sdk,
-        taostats=taostats,
-        amount=amount,
-        validator_ss58=selected_hotkey,
-        netuid=netuid,
-        wallet_name=wallet_name,
-        safe_staking=safe_staking,
-        dry_run=settings.demo_mode,
-    ))
+    return asyncio.run(
+        stake_tao(
+            executor=executor,
+            sdk=sdk,
+            taostats=taostats,
+            amount=amount,
+            validator_ss58=selected_hotkey,
+            netuid=netuid,
+            wallet_name=wallet_name,
+            safe_staking=safe_staking,
+            dry_run=settings.demo_mode,
+        )
+    )

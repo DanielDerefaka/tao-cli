@@ -1,16 +1,17 @@
 """Subnet registration operations for taox."""
 
 from typing import Optional
-from rich.panel import Panel
-from rich import box
 
-from taox.ui.console import console, format_tao, format_address, print_success, print_error
-from taox.ui.theme import TaoxColors, Symbols
-from taox.commands.executor import BtcliExecutor, CommandResult
+from rich import box
+from rich.panel import Panel
+
+from taox.commands.executor import BtcliExecutor
+from taox.config.settings import get_settings
 from taox.data.sdk import BittensorSDK
 from taox.data.taostats import TaostatsClient
 from taox.security.confirm import confirm_transaction, show_transaction_preview
-from taox.config.settings import get_settings
+from taox.ui.console import console, format_address, format_tao, print_error, print_success
+from taox.ui.theme import Symbols, TaoxColors
 
 
 def build_register_command(
@@ -104,7 +105,7 @@ async def get_burn_cost(
             for line in result.stdout.split("\n"):
                 if "burn" in line.lower() and "tao" in line.lower():
                     parts = line.split()
-                    for i, part in enumerate(parts):
+                    for _i, part in enumerate(parts):
                         try:
                             cost = float(part.replace(",", ""))
                             return cost
@@ -150,12 +151,14 @@ async def show_registration_info(
   Validators: {subnet.validators}
   Total Stake: {format_tao(subnet.total_stake)}"""
 
-    console.print(Panel(
-        content,
-        title=f"[primary]{Symbols.INFO} Registration Info[/primary]",
-        border_style=TaoxColors.PRIMARY,
-        box=box.ROUNDED,
-    ))
+    console.print(
+        Panel(
+            content,
+            title=f"[primary]{Symbols.INFO} Registration Info[/primary]",
+            border_style=TaoxColors.PRIMARY,
+            box=box.ROUNDED,
+        )
+    )
 
 
 async def register_burned(
@@ -204,20 +207,24 @@ async def register_burned(
     if wallet:
         balance = await sdk.get_balance_async(wallet.coldkey.ss58_address)
         if balance.free < burn_cost:
-            print_error(f"Insufficient balance. Need {format_tao(burn_cost)}, have {format_tao(balance.free)}")
+            print_error(
+                f"Insufficient balance. Need {format_tao(burn_cost)}, have {format_tao(balance.free)}"
+            )
             return False
     else:
         console.print("[warning]Could not verify balance (demo mode)[/warning]")
 
     # Show registration info
-    console.print(Panel(
-        f"[bold]Subnet:[/bold] SN{netuid} - {subnet.name or 'Unknown'}\n"
-        f"[bold]Burn Cost:[/bold] {format_tao(burn_cost)} [dim](≈${usd_cost:,.2f})[/dim]\n"
-        f"[bold]Emission:[/bold] {subnet.emission * 100:.2f}%",
-        title=f"[warning]{Symbols.WARN} Registration Cost[/warning]",
-        border_style=TaoxColors.WARNING,
-        box=box.ROUNDED,
-    ))
+    console.print(
+        Panel(
+            f"[bold]Subnet:[/bold] SN{netuid} - {subnet.name or 'Unknown'}\n"
+            f"[bold]Burn Cost:[/bold] {format_tao(burn_cost)} [dim](≈${usd_cost:,.2f})[/dim]\n"
+            f"[bold]Emission:[/bold] {subnet.emission * 100:.2f}%",
+            title=f"[warning]{Symbols.WARN} Registration Cost[/warning]",
+            border_style=TaoxColors.WARNING,
+            box=box.ROUNDED,
+        )
+    )
 
     cmd_info = build_register_command(
         netuid=netuid,
@@ -290,15 +297,17 @@ async def register_pow(
     wallet_name = wallet_name or settings.bittensor.default_wallet
     hotkey_name = hotkey_name or settings.bittensor.default_hotkey
 
-    console.print(Panel(
-        "[bold]Proof-of-Work Registration[/bold]\n\n"
-        "This will use your CPU to solve a computational puzzle.\n"
-        "The process can take anywhere from minutes to hours depending\n"
-        "on the subnet's difficulty and your hardware.",
-        title=f"[warning]{Symbols.WARN} PoW Registration[/warning]",
-        border_style=TaoxColors.WARNING,
-        box=box.ROUNDED,
-    ))
+    console.print(
+        Panel(
+            "[bold]Proof-of-Work Registration[/bold]\n\n"
+            "This will use your CPU to solve a computational puzzle.\n"
+            "The process can take anywhere from minutes to hours depending\n"
+            "on the subnet's difficulty and your hardware.",
+            title=f"[warning]{Symbols.WARN} PoW Registration[/warning]",
+            border_style=TaoxColors.WARNING,
+            box=box.ROUNDED,
+        )
+    )
 
     cmd_info = build_pow_register_command(
         netuid=netuid,
@@ -315,6 +324,7 @@ async def register_pow(
 
     # Confirm
     from InquirerPy import inquirer
+
     if not skip_confirm:
         confirm = inquirer.confirm(
             message=f"Start PoW registration on subnet {netuid}?",
@@ -357,17 +367,20 @@ def register_wizard(
         True if registration was successful
     """
     import asyncio
+
     from InquirerPy import inquirer
     from InquirerPy.base.control import Choice
 
     settings = get_settings()
 
-    console.print(Panel(
-        "[bold]Welcome to the Registration Wizard![/bold]\n\n"
-        "This wizard will guide you through registering on a Bittensor subnet.",
-        title="[primary]Registration Wizard[/primary]",
-        box=box.ROUNDED
-    ))
+    console.print(
+        Panel(
+            "[bold]Welcome to the Registration Wizard![/bold]\n\n"
+            "This wizard will guide you through registering on a Bittensor subnet.",
+            title="[primary]Registration Wizard[/primary]",
+            box=box.ROUNDED,
+        )
+    )
     console.print()
 
     # Step 1: Select wallet
@@ -379,8 +392,7 @@ def register_wizard(
         return False
 
     wallet_choices = [
-        Choice(value=w.name, name=f"{w.name} ({format_address(w.coldkey_ss58)})")
-        for w in wallets
+        Choice(value=w.name, name=f"{w.name} ({format_address(w.coldkey_ss58)})") for w in wallets
     ]
 
     wallet_name = inquirer.select(
@@ -407,7 +419,7 @@ def register_wizard(
     subnet_choices = [
         Choice(
             value=s.netuid,
-            name=f"SN{s.netuid} - {s.name or 'Unknown'} ({s.emission * 100:.1f}% emission, {format_tao(s.burn_cost)} burn)"
+            name=f"SN{s.netuid} - {s.name or 'Unknown'} ({s.emission * 100:.1f}% emission, {format_tao(s.burn_cost)} burn)",
         )
         for s in sorted(subnets, key=lambda x: x.emission, reverse=True)
         if s.netuid > 0
@@ -434,7 +446,11 @@ def register_wizard(
         Choice(
             value="burn",
             name=f"Burned registration (costs {format_tao(subnet.burn_cost if subnet else 0)})"
-            + (" [green](affordable)[/green]" if can_afford else " [red](insufficient balance)[/red]")
+            + (
+                " [green](affordable)[/green]"
+                if can_afford
+                else " [red](insufficient balance)[/red]"
+            ),
         ),
         Choice(value="pow", name="Proof-of-Work registration (free but takes time)"),
     ]
@@ -448,10 +464,13 @@ def register_wizard(
     # Step 4: Select hotkey
     console.print("[bold]Step 4: Select Hotkey[/bold]")
 
-    hotkey_name = inquirer.text(
-        message="Enter hotkey name (or press Enter for 'default'):",
-        default="default",
-    ).execute() or "default"
+    hotkey_name = (
+        inquirer.text(
+            message="Enter hotkey name (or press Enter for 'default'):",
+            default="default",
+        ).execute()
+        or "default"
+    )
 
     console.print(f"[success]Using hotkey: {hotkey_name}[/success]\n")
 
@@ -460,31 +479,39 @@ def register_wizard(
 
     if method == "burn":
         if not can_afford and not settings.demo_mode:
-            print_error(f"Insufficient balance. Need {format_tao(subnet.burn_cost if subnet else 0)}")
+            print_error(
+                f"Insufficient balance. Need {format_tao(subnet.burn_cost if subnet else 0)}"
+            )
             return False
 
-        return asyncio.run(register_burned(
-            executor=executor,
-            sdk=sdk,
-            taostats=taostats,
-            netuid=netuid,
-            wallet_name=wallet_name,
-            hotkey_name=hotkey_name,
-            dry_run=settings.demo_mode,
-        ))
+        return asyncio.run(
+            register_burned(
+                executor=executor,
+                sdk=sdk,
+                taostats=taostats,
+                netuid=netuid,
+                wallet_name=wallet_name,
+                hotkey_name=hotkey_name,
+                dry_run=settings.demo_mode,
+            )
+        )
     else:
-        num_processes = int(inquirer.number(
-            message="Number of CPU processes to use:",
-            default=4,
-            min_allowed=1,
-            max_allowed=32,
-        ).execute())
+        num_processes = int(
+            inquirer.number(
+                message="Number of CPU processes to use:",
+                default=4,
+                min_allowed=1,
+                max_allowed=32,
+            ).execute()
+        )
 
-        return asyncio.run(register_pow(
-            executor=executor,
-            sdk=sdk,
-            netuid=netuid,
-            wallet_name=wallet_name,
-            hotkey_name=hotkey_name,
-            num_processes=num_processes,
-        ))
+        return asyncio.run(
+            register_pow(
+                executor=executor,
+                sdk=sdk,
+                netuid=netuid,
+                wallet_name=wallet_name,
+                hotkey_name=hotkey_name,
+                num_processes=num_processes,
+            )
+        )

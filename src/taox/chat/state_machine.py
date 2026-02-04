@@ -10,16 +10,15 @@ This module implements a slot-filling conversation engine that:
 
 import json
 import logging
-from enum import Enum
-from typing import Optional, Any, Callable, Awaitable
 from dataclasses import dataclass, field
 from datetime import datetime
+from enum import Enum
 from pathlib import Path
+from typing import Any, Callable, Optional
 
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from taox.config.settings import get_settings
-
 
 logger = logging.getLogger(__name__)
 
@@ -31,8 +30,10 @@ PREFERENCES_FILE = Path.home() / ".taox" / "preferences.json"
 # Intent Types
 # =============================================================================
 
+
 class IntentType(str, Enum):
     """Types of user intents that taox can handle."""
+
     # Transaction intents (require confirmation)
     STAKE = "stake"
     UNSTAKE = "unstake"
@@ -60,8 +61,10 @@ class IntentType(str, Enum):
 # Slot Definitions
 # =============================================================================
 
+
 class SlotType(str, Enum):
     """Types of slots that can be filled."""
+
     AMOUNT = "amount"
     DESTINATION = "destination"
     VALIDATOR = "validator"
@@ -75,6 +78,7 @@ class SlotType(str, Enum):
 @dataclass
 class SlotDefinition:
     """Definition of a slot with its properties."""
+
     name: SlotType
     required: bool
     prompt: str  # Question to ask if missing
@@ -216,8 +220,10 @@ INTENT_SLOTS: dict[IntentType, list[SlotDefinition]] = {
 # Pydantic Models for Slots
 # =============================================================================
 
+
 class FilledSlots(BaseModel):
     """Container for all filled slot values."""
+
     model_config = ConfigDict(extra="allow")  # Allow extra fields for flexibility
 
     amount: Optional[float] = None
@@ -275,6 +281,7 @@ class FilledSlots(BaseModel):
 
 class ParsedIntent(BaseModel):
     """A parsed intent with its slots."""
+
     type: IntentType
     slots: FilledSlots = Field(default_factory=FilledSlots)
     raw_input: str = ""
@@ -292,7 +299,9 @@ class ParsedIntent(BaseModel):
             parts.append(f", netuid={self.slots.netuid}")
         if self.slots.destination:
             dest = self.slots.destination
-            parts.append(f", dest={dest[:12]}...{dest[-6:]}" if len(dest) > 20 else f", dest={dest}")
+            parts.append(
+                f", dest={dest[:12]}...{dest[-6:]}" if len(dest) > 20 else f", dest={dest}"
+            )
         parts.append(")")
         return "".join(parts)
 
@@ -301,8 +310,10 @@ class ParsedIntent(BaseModel):
 # User Preferences (Memory)
 # =============================================================================
 
+
 class UserPreferences(BaseModel):
     """Persistent user preferences for defaults."""
+
     default_wallet: Optional[str] = None
     default_hotkey: Optional[str] = None
     default_network: str = "finney"
@@ -317,7 +328,7 @@ class UserPreferences(BaseModel):
         """Load preferences from disk."""
         try:
             if PREFERENCES_FILE.exists():
-                with open(PREFERENCES_FILE, "r") as f:
+                with open(PREFERENCES_FILE) as f:
                     data = json.load(f)
                     return cls(**data)
         except Exception as e:
@@ -349,8 +360,10 @@ class UserPreferences(BaseModel):
 # Conversation State
 # =============================================================================
 
+
 class ConversationState(str, Enum):
     """States in the conversation state machine."""
+
     IDLE = "idle"  # Waiting for user input
     SLOT_FILLING = "slot_filling"  # Collecting missing information
     CONFIRMING = "confirming"  # Waiting for user confirmation
@@ -361,6 +374,7 @@ class ConversationState(str, Enum):
 @dataclass
 class PendingAction:
     """An action waiting for confirmation or slot-filling."""
+
     intent: ParsedIntent
     missing_slots: list[SlotDefinition] = field(default_factory=list)
     current_slot_index: int = 0
@@ -449,7 +463,9 @@ class ConversationEngine:
         elif intent.type == IntentType.UNSTAKE:
             amount = "all" if slots.amount_all else f"{slots.amount} τ"
             validator = slots.validator_name or slots.validator_ss58 or "?"
-            lines.append(f"• Unstake **{amount}** from **{validator}** on subnet **{slots.netuid}**")
+            lines.append(
+                f"• Unstake **{amount}** from **{validator}** on subnet **{slots.netuid}**"
+            )
 
         elif intent.type == IntentType.TRANSFER:
             dest = slots.destination or "?"
@@ -471,7 +487,9 @@ class ConversationEngine:
 
         return "\n".join(lines)
 
-    def process_input(self, user_input: str, parsed_intent: Optional[ParsedIntent] = None) -> "ConversationResponse":
+    def process_input(
+        self, user_input: str, parsed_intent: Optional[ParsedIntent] = None
+    ) -> "ConversationResponse":
         """Process user input and return appropriate response.
 
         Args:
@@ -588,7 +606,7 @@ class ConversationEngine:
         if slot:
             try:
                 self.pending_action.intent.slots.set_slot(slot.name, user_input.strip())
-            except (ValueError, TypeError) as e:
+            except (ValueError, TypeError):
                 return ConversationResponse(
                     message=f"That doesn't look right. {slot.prompt}",
                     action=ResponseAction.ASK,
@@ -719,7 +737,8 @@ class ConversationEngine:
 
     def _parse_intent(self, user_input: str) -> ParsedIntent:
         """Parse user input into a ParsedIntent using pattern matching."""
-        from taox.chat.intents import MockIntentParser, IntentType as OldIntentType
+        from taox.chat.intents import IntentType as OldIntentType
+        from taox.chat.intents import MockIntentParser
 
         # Use existing mock parser
         old_intent = MockIntentParser.parse(user_input)
@@ -878,8 +897,10 @@ class ConversationEngine:
 # Response Types
 # =============================================================================
 
+
 class ResponseAction(str, Enum):
     """Type of action the CLI should take."""
+
     DISPLAY = "display"  # Just display the message
     ASK = "ask"  # Display message and wait for input (slot-filling)
     CONFIRM = "confirm"  # Display confirmation prompt
@@ -890,6 +911,7 @@ class ResponseAction(str, Enum):
 @dataclass
 class ConversationResponse:
     """Response from the conversation engine."""
+
     message: str
     action: ResponseAction
     intent: Optional[ParsedIntent] = None

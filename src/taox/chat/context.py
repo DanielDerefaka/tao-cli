@@ -7,15 +7,15 @@ This module manages:
 - Follow-up command resolution
 """
 
+from collections import deque
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Optional, TYPE_CHECKING
-from collections import deque
+from typing import TYPE_CHECKING, Optional
 
 from taox.chat.intents import Intent, IntentType
 
 if TYPE_CHECKING:
-    from taox.chat.state_machine import ConversationEngine, ParsedIntent
+    from taox.chat.state_machine import ConversationEngine
 
 
 @dataclass
@@ -84,9 +84,7 @@ class ConversationContext:
             content: The user's message
             intent: Parsed intent (if available)
         """
-        self.history.append(
-            Message(role="user", content=content, intent=intent)
-        )
+        self.history.append(Message(role="user", content=content, intent=intent))
 
         # Update last operation context if intent provided
         if intent:
@@ -145,10 +143,7 @@ class ConversationContext:
                 # If same role, skip the duplicate (keep the earlier one)
             recent = cleaned
 
-        return [
-            {"role": msg.role, "content": msg.content}
-            for msg in recent
-        ]
+        return [{"role": msg.role, "content": msg.content} for msg in recent]
 
     def resolve_follow_up(self, intent: Intent) -> Intent:
         """Resolve follow-up references using conversation context.
@@ -260,6 +255,7 @@ class ConversationContext:
         # Add engine state if available
         if self._engine:
             from taox.chat.state_machine import ConversationState
+
             if self._engine.state != ConversationState.IDLE:
                 parts.append(f"State: {self._engine.state.value}")
             if self._engine.pending_action:

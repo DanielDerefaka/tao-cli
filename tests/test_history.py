@@ -1,15 +1,14 @@
 """Tests for transaction history."""
 
-import pytest
 import json
-from pathlib import Path
-from datetime import datetime
+
+import pytest
 
 from taox.data.history import (
     Transaction,
     TransactionHistory,
-    TransactionType,
     TransactionStatus,
+    TransactionType,
 )
 
 
@@ -168,8 +167,12 @@ class TestTransactionHistory:
 
     def test_export_json(self, history, tmp_path):
         """Test exporting to JSON."""
-        history.record(tx_type=TransactionType.STAKE, status=TransactionStatus.SUCCESS, amount=100.0)
-        history.record(tx_type=TransactionType.TRANSFER, status=TransactionStatus.SUCCESS, amount=50.0)
+        history.record(
+            tx_type=TransactionType.STAKE, status=TransactionStatus.SUCCESS, amount=100.0
+        )
+        history.record(
+            tx_type=TransactionType.TRANSFER, status=TransactionStatus.SUCCESS, amount=50.0
+        )
 
         export_path = tmp_path / "export.json"
         count = history.export_json(export_path)
@@ -183,8 +186,12 @@ class TestTransactionHistory:
 
     def test_export_csv(self, history, tmp_path):
         """Test exporting to CSV."""
-        history.record(tx_type=TransactionType.STAKE, status=TransactionStatus.SUCCESS, amount=100.0)
-        history.record(tx_type=TransactionType.TRANSFER, status=TransactionStatus.SUCCESS, amount=50.0)
+        history.record(
+            tx_type=TransactionType.STAKE, status=TransactionStatus.SUCCESS, amount=100.0
+        )
+        history.record(
+            tx_type=TransactionType.TRANSFER, status=TransactionStatus.SUCCESS, amount=50.0
+        )
 
         export_path = tmp_path / "export.csv"
         count = history.export_csv(export_path)
@@ -218,7 +225,7 @@ class TestTransactionHistory:
 
     def test_limit(self, history):
         """Test limiting results."""
-        for i in range(10):
+        for _i in range(10):
             history.record(tx_type=TransactionType.STAKE, status=TransactionStatus.SUCCESS)
 
         limited = history.get_all(limit=5)
@@ -227,7 +234,7 @@ class TestTransactionHistory:
     def test_ordering(self, history):
         """Test results are ordered by timestamp descending."""
         tx1 = history.record(tx_type=TransactionType.STAKE, status=TransactionStatus.SUCCESS)
-        tx2 = history.record(tx_type=TransactionType.STAKE, status=TransactionStatus.SUCCESS)
+        history.record(tx_type=TransactionType.STAKE, status=TransactionStatus.SUCCESS)
         tx3 = history.record(tx_type=TransactionType.STAKE, status=TransactionStatus.SUCCESS)
 
         all_tx = history.get_all()
