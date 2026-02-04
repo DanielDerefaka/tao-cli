@@ -1,6 +1,5 @@
 """Tests for the conversation state machine."""
 
-
 from taox.chat.state_machine import (
     INTENT_SLOTS,
     ConversationEngine,

@@ -648,11 +648,25 @@ class TestTxHashPattern:
 
 
 class TestExecutorWithMockedBtcli:
-    """Test executor with mocked subprocess calls."""
+    """Test executor with mocked subprocess calls.
 
+    Note: These tests mock settings to disable demo_mode.
+    """
+
+    def _mock_settings(self):
+        """Create a mock settings object with demo_mode=False."""
+        mock = MagicMock()
+        mock.demo_mode = False
+        mock.bittensor.network = "finney"
+        mock.bittensor.default_wallet = "default"
+        mock.bittensor.default_hotkey = "default"
+        return mock
+
+    @patch("taox.commands.executor.get_settings")
     @patch("subprocess.run")
-    def test_normal_execution_success(self, mock_run):
+    def test_normal_execution_success(self, mock_run, mock_get_settings):
         """Normal execution parses successful output."""
+        mock_get_settings.return_value = self._mock_settings()
         mock_run.return_value = MagicMock(stdout="Balance: 100.5 TAO ✅", stderr="", returncode=0)
 
         executor = BtcliExecutor()
@@ -661,9 +675,11 @@ class TestExecutorWithMockedBtcli:
         assert result.status == ExecutionStatus.SUCCESS
         assert "100.5 TAO" in result.stdout
 
+    @patch("taox.commands.executor.get_settings")
     @patch("subprocess.run")
-    def test_normal_execution_failure(self, mock_run):
+    def test_normal_execution_failure(self, mock_run, mock_get_settings):
         """Normal execution detects failure."""
+        mock_get_settings.return_value = self._mock_settings()
         mock_run.return_value = MagicMock(stdout="", stderr="Error: Wallet not found", returncode=1)
 
         executor = BtcliExecutor()
@@ -672,9 +688,11 @@ class TestExecutorWithMockedBtcli:
         assert result.status == ExecutionStatus.FAILED
         assert result.error_message is not None
 
+    @patch("taox.commands.executor.get_settings")
     @patch("subprocess.run")
-    def test_normal_execution_extracts_tx_hash(self, mock_run):
+    def test_normal_execution_extracts_tx_hash(self, mock_run, mock_get_settings):
         """Normal execution extracts transaction hash."""
+        mock_get_settings.return_value = self._mock_settings()
         mock_run.return_value = MagicMock(
             stdout="Transfer complete!\nBlock hash: 0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890\n✅",
             stderr="",
@@ -691,11 +709,13 @@ class TestExecutorWithMockedBtcli:
             result.tx_hash == "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890"
         )
 
+    @patch("taox.commands.executor.get_settings")
     @patch("subprocess.run")
-    def test_timeout_handling(self, mock_run):
+    def test_timeout_handling(self, mock_run, mock_get_settings):
         """Timeout is handled gracefully."""
         import subprocess
 
+        mock_get_settings.return_value = self._mock_settings()
         mock_run.side_effect = subprocess.TimeoutExpired(cmd=["btcli"], timeout=120)
 
         executor = BtcliExecutor(timeout=120)
@@ -704,9 +724,11 @@ class TestExecutorWithMockedBtcli:
         assert result.status == ExecutionStatus.TIMEOUT
         assert "timed out" in result.error_message.lower()
 
+    @patch("taox.commands.executor.get_settings")
     @patch("subprocess.run")
-    def test_btcli_not_found(self, mock_run):
+    def test_btcli_not_found(self, mock_run, mock_get_settings):
         """Missing btcli handled gracefully."""
+        mock_get_settings.return_value = self._mock_settings()
         mock_run.side_effect = FileNotFoundError("btcli not found")
 
         executor = BtcliExecutor()

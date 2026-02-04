@@ -210,13 +210,21 @@ class MockIntentParser:
                         if len(groups) > 2 and groups[2]:
                             intent.netuid = int(groups[2])
 
-                    elif intent_type == IntentType.UNSTAKE and groups or intent_type == IntentType.TRANSFER and groups:
+                    elif (
+                        intent_type == IntentType.UNSTAKE
+                        and groups
+                        or intent_type == IntentType.TRANSFER
+                        and groups
+                    ):
                         if groups[0]:
                             with contextlib.suppress(ValueError):
                                 intent.amount = float(groups[0])
                         # destination already extracted from SS58_PATTERN above
 
-                    elif intent_type in (IntentType.METAGRAPH, IntentType.VALIDATORS) or intent_type == IntentType.REGISTER:
+                    elif (
+                        intent_type in (IntentType.METAGRAPH, IntentType.VALIDATORS)
+                        or intent_type == IntentType.REGISTER
+                    ):
                         if groups and groups[0]:
                             intent.netuid = int(groups[0])
 
