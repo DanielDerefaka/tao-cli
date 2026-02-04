@@ -1,0 +1,73 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+venv/
+.venv/
+env/
+ENV/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+coverage.xml
+*.cover
+
+# Type checking
+.mypy_cache/
+.pytype/
+
+# Secrets (NEVER commit)
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+secrets/
+
+# Local config
+config.local.yaml
+.taox/
+
+# Logs
+*.log
+logs/
+
+# Cache
+.cache/
+cache/
+
+# Docs build
+docs/_build/
+site/

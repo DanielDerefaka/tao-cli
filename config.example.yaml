@@ -1,0 +1,23 @@
+# taox Configuration
+# Copy to ~/.taox/config.yaml and customize.
+# Store API keys in system keyring using `taox setup`, not here!
+
+bittensor:
+  network: finney
+  default_wallet: default
+  default_hotkey: default
+  wallet_path: ~/.bittensor/wallets
+
+taostats:
+  base_url: https://api.taostats.io
+
+llm:
+  base_url: https://llm.chutes.ai/v1
+  model: deepseek-ai/DeepSeek-V3
+
+safety:
+  confirm_transactions: true
+  high_value_threshold: 10
+  auto_execute: false
+
+demo_mode: false

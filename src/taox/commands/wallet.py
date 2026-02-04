@@ -8,7 +8,7 @@ from taox.ui.console import console, format_tao, format_address, print_success, 
 from taox.ui.theme import TaoxColors
 from taox.data.sdk import BittensorSDK, WalletInfo, BalanceInfo
 from taox.commands.executor import BtcliExecutor, build_balance_command, build_transfer_command
-from taox.security.confirm import confirm_transaction, show_transaction_preview
+from taox.security.confirm import confirm_transaction
 from taox.config.settings import get_settings
 
 
@@ -140,17 +140,11 @@ async def transfer_tao(
         wallet_name=wallet_name,
     )
 
-    # Show preview
-    show_transaction_preview(
-        command=executor.get_command_string(**cmd_info),
-        description=f"Transfer {amount} TAO to {destination[:16]}...",
-        dry_run=dry_run,
-    )
-
     if dry_run:
+        console.print(f"[muted]Would transfer {amount} τ to {format_address(destination)}[/muted]")
         return True
 
-    # Confirm
+    # Simple confirmation
     if not confirm_transaction(
         action="Transfer TAO",
         amount=amount,
@@ -158,16 +152,15 @@ async def transfer_tao(
         from_address=from_address,
         skip_confirm=skip_confirm,
     ):
-        console.print("[muted]Transfer cancelled.[/muted]")
+        console.print("[muted]Cancelled.[/muted]")
         return False
 
-    # Execute
-    with console.status("[bold green]Executing transfer..."):
-        result = executor.run(**cmd_info)
+    # Execute with interactive password handling
+    console.print("[muted]Executing transfer...[/muted]")
+    result = executor.run_interactive(**cmd_info)
 
     if result.success:
-        print_success(f"Transferred {amount} TAO to {destination[:16]}...")
-        console.print(f"[muted]{result.stdout}[/muted]")
+        print_success(f"Sent {amount} τ to {format_address(destination)}")
         return True
     else:
         print_error(f"Transfer failed: {result.stderr}")

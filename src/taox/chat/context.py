@@ -1,11 +1,21 @@
-"""Conversation context management for taox."""
+"""Conversation context management for taox.
+
+This module manages:
+- Message history for context-aware responses
+- Integration with the conversation state machine
+- Session state (wallet, network)
+- Follow-up command resolution
+"""
 
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
 from collections import deque
 
 from taox.chat.intents import Intent, IntentType
+
+if TYPE_CHECKING:
+    from taox.chat.state_machine import ConversationEngine, ParsedIntent
 
 
 @dataclass
@@ -26,6 +36,7 @@ class ConversationContext:
     - Recent messages for context-aware responses
     - Current wallet and network settings
     - Recent operations for follow-up commands
+    - Integration with ConversationEngine for state machine
     """
 
     # Message history (limited to avoid memory issues)
@@ -41,6 +52,30 @@ class ConversationContext:
     last_validator: Optional[str] = None
     last_netuid: Optional[int] = None
     last_amount: Optional[float] = None
+
+    # State machine reference (set after initialization)
+    _engine: Optional["ConversationEngine"] = None
+
+    def set_engine(self, engine: "ConversationEngine") -> None:
+        """Set the conversation engine reference.
+
+        Args:
+            engine: ConversationEngine instance
+        """
+        self._engine = engine
+
+        # Sync engine preferences with context
+        if engine.preferences.default_wallet:
+            self.current_wallet = engine.preferences.default_wallet
+        if engine.preferences.default_hotkey:
+            self.current_hotkey = engine.preferences.default_hotkey
+        if engine.preferences.default_network:
+            self.current_network = engine.preferences.default_network
+
+    @property
+    def engine(self) -> Optional["ConversationEngine"]:
+        """Get the conversation engine."""
+        return self._engine
 
     def add_user_message(self, content: str, intent: Optional[Intent] = None) -> None:
         """Add a user message to the history.
@@ -85,15 +120,34 @@ class ConversationContext:
     def get_history_for_llm(self, n: int = 10) -> list[dict]:
         """Get history formatted for LLM API calls.
 
+        Ensures the history starts with a user message and maintains
+        proper user/assistant alternation for LLM APIs.
+
         Args:
             n: Number of messages to include
 
         Returns:
             List of dicts with 'role' and 'content' keys
         """
+        recent = self.get_recent_history(n)
+
+        # Ensure history starts with a user message (LLM API requirement)
+        # If truncation caused us to start with assistant, skip it
+        while recent and recent[0].role == "assistant":
+            recent = recent[1:]
+
+        # Also ensure alternation - remove any consecutive messages of same role
+        if len(recent) > 1:
+            cleaned = [recent[0]]
+            for msg in recent[1:]:
+                if msg.role != cleaned[-1].role:
+                    cleaned.append(msg)
+                # If same role, skip the duplicate (keep the earlier one)
+            recent = cleaned
+
         return [
             {"role": msg.role, "content": msg.content}
-            for msg in self.get_recent_history(n)
+            for msg in recent
         ]
 
     def resolve_follow_up(self, intent: Intent) -> Intent:
@@ -137,6 +191,13 @@ class ConversationContext:
         if hotkey_name:
             self.current_hotkey = hotkey_name
 
+        # Sync with engine if available
+        if self._engine:
+            self._engine.preferences.default_wallet = wallet_name
+            if hotkey_name:
+                self._engine.preferences.default_hotkey = hotkey_name
+            self._engine.preferences.save()
+
     def set_network(self, network: str) -> None:
         """Set the current network.
 
@@ -145,6 +206,24 @@ class ConversationContext:
         """
         self.current_network = network
 
+        # Sync with engine if available
+        if self._engine:
+            self._engine.preferences.default_network = network
+            self._engine.preferences.save()
+
+    def set_default_netuid(self, netuid: int) -> None:
+        """Set the default subnet ID.
+
+        Args:
+            netuid: Subnet ID
+        """
+        self.last_netuid = netuid
+
+        # Sync with engine if available
+        if self._engine:
+            self._engine.preferences.default_netuid = netuid
+            self._engine.preferences.save()
+
     def clear(self) -> None:
         """Clear conversation history but keep wallet/network settings."""
         self.history.clear()
@@ -152,6 +231,10 @@ class ConversationContext:
         self.last_validator = None
         self.last_netuid = None
         self.last_amount = None
+
+        # Reset engine state if available
+        if self._engine:
+            self._engine._reset()
 
     def get_context_summary(self) -> str:
         """Get a summary of current context for LLM system prompt.
@@ -174,4 +257,32 @@ class ConversationContext:
         if self.last_netuid is not None:
             parts.append(f"Last subnet: {self.last_netuid}")
 
+        # Add engine state if available
+        if self._engine:
+            from taox.chat.state_machine import ConversationState
+            if self._engine.state != ConversationState.IDLE:
+                parts.append(f"State: {self._engine.state.value}")
+            if self._engine.pending_action:
+                parts.append(f"Pending: {self._engine.pending_action.intent.type.value}")
+
         return "\n".join(parts)
+
+    def get_state_prompt(self) -> Optional[str]:
+        """Get any prompt from the current state machine state.
+
+        Returns:
+            Prompt string if in slot-filling or confirmation state, None otherwise
+        """
+        if self._engine:
+            return self._engine.get_state_prompt()
+        return None
+
+    def get_follow_up_suggestions(self) -> list[str]:
+        """Get suggested follow-up actions.
+
+        Returns:
+            List of suggested actions
+        """
+        if self._engine:
+            return self._engine.get_follow_up_suggestions()
+        return []

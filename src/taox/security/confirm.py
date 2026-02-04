@@ -1,5 +1,6 @@
 """Transaction and action confirmation utilities."""
 
+import asyncio
 from typing import Optional
 from rich.panel import Panel
 from rich import box
@@ -9,6 +10,41 @@ from InquirerPy import inquirer
 from taox.ui.console import console, format_tao, format_address
 from taox.ui.theme import TaoxColors, Symbols
 from taox.config.settings import get_settings
+
+
+def _is_event_loop_running() -> bool:
+    """Check if we're inside a running asyncio event loop."""
+    try:
+        loop = asyncio.get_running_loop()
+        return loop is not None
+    except RuntimeError:
+        return False
+
+
+def _simple_confirm(message: str, default: bool = False) -> bool:
+    """Simple confirmation prompt using standard input.
+
+    Used when InquirerPy can't run (inside async event loop).
+    """
+    suffix = "[Y/n]" if default else "[y/N]"
+    try:
+        response = console.input(f"[bold]{message}[/bold] {suffix} ").strip().lower()
+        if not response:
+            return default
+        return response in ("y", "yes")
+    except (EOFError, KeyboardInterrupt):
+        return False
+
+
+def _simple_text_input(message: str) -> str:
+    """Simple text input using standard input.
+
+    Used when InquirerPy can't run (inside async event loop).
+    """
+    try:
+        return console.input(f"[bold]{message}[/bold] ").strip()
+    except (EOFError, KeyboardInterrupt):
+        return ""
 
 
 def confirm_action(
@@ -32,6 +68,10 @@ def confirm_action(
     settings = get_settings()
     if not settings.security.require_confirmation:
         return True
+
+    # Use simple prompt if inside event loop (InquirerPy can't run there)
+    if _is_event_loop_running():
+        return _simple_confirm(message, default)
 
     return inquirer.confirm(
         message=message,
@@ -73,40 +113,20 @@ def confirm_transaction(
     if not settings.security.require_confirmation:
         return True
 
-    # Build confirmation panel content
-    lines = [f"[warning]{Symbols.WARN} {action}[/warning]", ""]
-
+    # Build simple confirmation message
+    parts = []
     if amount is not None:
-        lines.append(f"[bold]Amount:[/bold] {format_tao(amount)}")
-
+        parts.append(f"{amount} τ")
     if validator_name:
-        lines.append(f"[bold]Validator:[/bold] [validator]{validator_name}[/validator]")
-
-    if to_address:
-        lines.append(f"[bold]To:[/bold] {format_address(to_address, truncate=False)}")
-
-    if from_address:
-        lines.append(f"[bold]From:[/bold] {format_address(from_address, truncate=False)}")
-
+        parts.append(f"to {validator_name}")
+    elif to_address:
+        parts.append(f"to {format_address(to_address)}")
     if netuid is not None:
-        lines.append(f"[bold]Subnet:[/bold] [subnet]SN{netuid}[/subnet]")
+        parts.append(f"on SN{netuid}")
 
-    if extra_info:
-        lines.append("")
-        for key, value in extra_info.items():
-            lines.append(f"[bold]{key}:[/bold] {value}")
+    confirm_msg = f"{action}: {' '.join(parts)}?" if parts else f"{action}?"
 
-    # Display confirmation panel
-    console.print(
-        Panel(
-            "\n".join(lines),
-            title=f"[warning]{Symbols.WARN} Confirm Transaction[/warning]",
-            border_style=TaoxColors.WARNING,
-            box=box.DOUBLE,
-        )
-    )
-
-    # For large amounts, require typing address prefix
+    # For large amounts, require extra verification
     is_large_amount = (
         amount is not None
         and settings.ui.confirm_large_tx
@@ -114,25 +134,23 @@ def confirm_transaction(
     )
 
     if is_large_amount and to_address:
-        console.print(
-            f"\n[warning]Large transaction detected ({format_tao(amount)})[/warning]"
-        )
+        console.print(f"[warning]{Symbols.WARN} Large amount: {format_tao(amount)}[/warning]")
         prefix_length = 8
         expected_prefix = to_address[:prefix_length].lower()
 
-        user_input = inquirer.text(
-            message=f"Type first {prefix_length} characters of destination address to confirm:",
-        ).execute()
+        if _is_event_loop_running():
+            user_input = _simple_text_input(f"Type first {prefix_length} chars of address to confirm:")
+        else:
+            user_input = inquirer.text(
+                message=f"Type first {prefix_length} chars of address to confirm:",
+            ).execute()
 
         if user_input.lower() != expected_prefix:
-            console.print("[error]Address prefix mismatch. Transaction cancelled.[/error]")
+            console.print("[error]Address mismatch. Cancelled.[/error]")
             return False
 
-    # Final confirmation
-    return inquirer.confirm(
-        message="Execute this transaction?",
-        default=False,
-    ).execute()
+    # Simple confirmation
+    return _simple_confirm(confirm_msg, default=False)
 
 
 def show_transaction_preview(
@@ -152,7 +170,7 @@ def show_transaction_preview(
     content = f"""[bold]Description:[/bold] {description}
 
 [bold]Command:[/bold]
-[command]btcli {command}[/command]
+[command]{command}[/command]
 {mode}"""
 
     console.print(

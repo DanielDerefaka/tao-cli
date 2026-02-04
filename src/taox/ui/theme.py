@@ -81,3 +81,4 @@ class Symbols:
     STAKE = "📊"
     TRANSFER = "🔄"
     SUBNET = "🌐"
+    ALPHA = "α"

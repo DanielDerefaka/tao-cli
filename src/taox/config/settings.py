@@ -5,15 +5,17 @@ from typing import Optional
 from functools import lru_cache
 
 import yaml
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class LLMSettings(BaseModel):
     """LLM configuration."""
 
+    model_config = ConfigDict(extra="ignore")
+
     provider: str = "chutes"
-    model: str = "meta-llama/Llama-3.1-8B-Instruct"
+    model: str = "unsloth/Mistral-Nemo-Instruct-2407"  # 12B, natural conversational style
     temperature: float = 0.7
     max_tokens: int = 1000
     base_url: str = "https://llm.chutes.ai/v1"
@@ -22,20 +24,28 @@ class LLMSettings(BaseModel):
 class BittensorSettings(BaseModel):
     """Bittensor network configuration."""
 
+    model_config = ConfigDict(extra="ignore")
+
     network: str = "finney"
     wallet_path: str = "~/.bittensor/wallets"
     default_wallet: str = "default"
     default_hotkey: str = "default"
+    multi_wallet_mode: bool = False
+    available_wallets: list[str] = Field(default_factory=list)
 
 
 class TaostatsSettings(BaseModel):
     """Taostats API configuration."""
+
+    model_config = ConfigDict(extra="ignore")
 
     base_url: str = "https://api.taostats.io/api"
 
 
 class UISettings(BaseModel):
     """UI configuration."""
+
+    model_config = ConfigDict(extra="ignore")
 
     theme: str = "dark"
     confirm_large_tx: bool = True
@@ -44,6 +54,8 @@ class UISettings(BaseModel):
 
 class SecuritySettings(BaseModel):
     """Security configuration."""
+
+    model_config = ConfigDict(extra="ignore")
 
     require_confirmation: bool = True
     mask_addresses: bool = False
@@ -61,10 +73,12 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_prefix="TAOX_",
         env_nested_delimiter="__",
+        extra="ignore",  # Ignore extra fields in config file
     )
 
     # Feature flags
     demo_mode: bool = Field(default=False, description="Run in demo mode without real API calls")
+    onboarding_complete: bool = Field(default=False, description="Whether onboarding has been completed")
 
     # Nested settings
     llm: LLMSettings = Field(default_factory=LLMSettings)
@@ -104,7 +118,7 @@ def create_default_config() -> None:
             "demo_mode": False,
             "llm": {
                 "provider": "chutes",
-                "model": "meta-llama/Llama-3.1-8B-Instruct",
+                "model": "unsloth/Mistral-Nemo-Instruct-2407",
                 "temperature": 0.7,
                 "max_tokens": 1000,
                 "base_url": "https://llm.chutes.ai/v1",

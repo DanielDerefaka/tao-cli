@@ -12,23 +12,31 @@ requires-python = ">=3.9"
 authors = [
     { name = "taox contributors" }
 ]
-keywords = ["bittensor", "cli", "ai", "tao", "blockchain"]
+maintainers = [
+    { name = "taox contributors" }
+]
+keywords = ["bittensor", "cli", "ai", "tao", "blockchain", "staking", "cryptocurrency"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Environment :: Console",
     "Intended Audience :: Developers",
+    "Intended Audience :: End Users/Desktop",
     "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Topic :: System :: Shells",
+    "Topic :: Office/Business :: Financial",
+    "Typing :: Typed",
 ]
 
 dependencies = [
     "typer>=0.9.0",
     "rich>=13.0.0",
+    "textual>=0.40.0",
     "InquirerPy>=0.3.4",
     "openai>=1.0.0",
     "httpx>=0.25.0",
@@ -37,7 +45,15 @@ dependencies = [
     "pydantic>=2.0.0",
     "pydantic-settings>=2.0.0",
     "cachetools>=5.3.0",
+    "pexpect>=4.8.0",
 ]
+
+[project.urls]
+Homepage = "https://github.com/taox-project/taox"
+Documentation = "https://github.com/taox-project/taox#readme"
+Repository = "https://github.com/taox-project/taox.git"
+Issues = "https://github.com/taox-project/taox/issues"
+Changelog = "https://github.com/taox-project/taox/blob/main/CHANGELOG.md"
 
 [project.optional-dependencies]
 bittensor = [
@@ -47,8 +63,15 @@ bittensor = [
 dev = [
     "pytest>=7.0.0",
     "pytest-asyncio>=0.21.0",
+    "pytest-cov>=4.0.0",
     "black>=23.0.0",
     "ruff>=0.1.0",
+    "mypy>=1.0.0",
+    "types-PyYAML>=6.0.0",
+    "types-cachetools>=5.0.0",
+]
+all = [
+    "taox[bittensor,dev]",
 ]
 
 [project.scripts]
@@ -64,3 +87,39 @@ target-version = ["py39"]
 [tool.ruff]
 line-length = 100
 target-version = "py39"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+ignore = ["E501"]  # Line length handled by formatter
+
+[tool.mypy]
+python_version = "3.9"
+warn_return_any = true
+warn_unused_configs = true
+ignore_missing_imports = true
+exclude = ["tests/"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+filterwarnings = [
+    "ignore::DeprecationWarning",
+    "ignore::UserWarning",
+]
+markers = [
+    "slow: marks tests as slow",
+    "integration: marks tests as integration tests",
+]
+
+[tool.coverage.run]
+source = ["src/taox"]
+branch = true
+omit = ["*/tests/*", "*/__pycache__/*"]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise NotImplementedError",
+    "if TYPE_CHECKING:",
+]

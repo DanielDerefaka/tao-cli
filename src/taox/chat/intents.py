@@ -19,7 +19,10 @@ class IntentType(str, Enum):
     INFO = "info"
     VALIDATORS = "validators"
     SUBNETS = "subnets"
+    HISTORY = "history"  # Transaction history
     HELP = "help"
+    CONFIRM = "confirm"  # User confirming something
+    GREETING = "greeting"  # Hello, hi, etc.
     UNKNOWN = "unknown"
 
 
@@ -79,8 +82,9 @@ class MockIntentParser:
             r"withdraw\s+(\d+(?:\.\d+)?)",
         ],
         IntentType.TRANSFER: [
-            r"transfer\s+(\d+(?:\.\d+)?)\s*(?:tao)?\s*to\s+(\S+)",
-            r"send\s+(\d+(?:\.\d+)?)\s*(?:tao)?\s*to\s+(\S+)",
+            r"transfer\s+(\d+(?:\.\d+)?)\s*(?:tao)?",
+            r"send\s+(\d+(?:\.\d+)?)\s*(?:tao)?",
+            r"(?:can you |please )?(?:send|transfer)\s+(\d+(?:\.\d+)?)",
         ],
         IntentType.BALANCE: [
             r"balance",
@@ -110,10 +114,40 @@ class MockIntentParser:
         IntentType.REGISTER: [
             r"register\s*(?:on\s+)?(?:subnet\s*)?(\d+)?",
         ],
+        IntentType.HISTORY: [
+            r"(?:view |show |list |get )?(?:my )?(?:transaction |tx )?history",
+            r"(?:recent |past |my )?transactions?",
+            r"what (?:have i|did i) (?:done|sent|transferred|staked)",
+            r"(?:show |list )?(?:my )?(?:recent )?(?:activity|actions)",
+        ],
         IntentType.HELP: [
             r"help",
-            r"what can you do",
-            r"commands?",
+            r"what (?:else )?can you do",
+            r"what (?:are )?(?:the |your )?(?:commands?|options|features|capabilities)",
+            r"how do i",
+            r"show me (?:what you can|how to)",
+            r"what do you (?:do|support)",
+            r"how (?:does|do) (?:this|taox) work",
+            r"getting started",
+            r"tutorial",
+            r"usage",
+        ],
+        IntentType.CONFIRM: [
+            r"^yes$",
+            r"^ok$",
+            r"^okay$",
+            r"^confirm$",
+            r"^sure$",
+            r"^y$",
+            r"^go ahead$",
+            r"^do it$",
+        ],
+        IntentType.GREETING: [
+            r"^hi$",
+            r"^hello$",
+            r"^hey$",
+            r"^sup$",
+            r"^yo$",
         ],
     }
 
@@ -190,10 +224,7 @@ class MockIntentParser:
                                 intent.amount = float(groups[0])
                             except ValueError:
                                 pass
-                        if len(groups) > 1 and groups[1]:
-                            # Check if it's an SS58 address
-                            if cls.SS58_PATTERN.match(groups[1]):
-                                intent.destination = groups[1]
+                        # destination already extracted from SS58_PATTERN above
 
                     elif intent_type in (IntentType.METAGRAPH, IntentType.VALIDATORS):
                         if groups and groups[0]:

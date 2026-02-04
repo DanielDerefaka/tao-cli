@@ -95,6 +95,14 @@ def format_address(address: str, truncate: bool = True) -> str:
     return f"[address]{display}[/address]"
 
 
+def format_alpha(amount: float, symbol: bool = True) -> str:
+    """Format an alpha token amount with proper styling."""
+    formatted = f"{amount:,.4f}"
+    if symbol:
+        return f"[alpha]{formatted} {Symbols.ALPHA}[/alpha]"
+    return f"[alpha]{formatted}[/alpha]"
+
+
 def create_table(title: str, columns: list[tuple[str, str]]) -> Table:
     """Create a styled table with the given columns.
 
