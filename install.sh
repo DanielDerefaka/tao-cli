@@ -6,6 +6,10 @@ set -euo pipefail
 
 REPO="https://github.com/DanielDerefaka/tao-cli.git"
 MIN_PYTHON="3.9"
+TAOX_DIR="$HOME/.taox"
+VENV_DIR="$TAOX_DIR/venv"
+CRED_FILE="$TAOX_DIR/.credentials"
+
 BOLD="\033[1m"
 GREEN="\033[32m"
 YELLOW="\033[33m"
@@ -60,27 +64,87 @@ else
     echo "    pip install bittensor-cli"
 fi
 
-# ── Install taox ──────────────────────────────────────────────
+# ── Check venv module ────────────────────────────────────────
+if ! "$PYTHON" -m venv --help &>/dev/null 2>&1; then
+    warn "Python venv module missing. Installing..."
+    if command -v apt-get &>/dev/null; then
+        sudo apt-get install -y "python${ver}-venv" 2>/dev/null || sudo apt-get install -y python3-venv 2>/dev/null || true
+    fi
+fi
+
+# ── Create venv ──────────────────────────────────────────────
 echo ""
-info "Installing taox..."
-if "$PYTHON" -m pip install git+"${REPO}" 2>&1 | tail -3; then
-    ok "taox installed"
+info "Setting up taox environment..."
+mkdir -p "$TAOX_DIR"
+
+if [ ! -d "$VENV_DIR" ]; then
+    "$PYTHON" -m venv "$VENV_DIR" 2>/dev/null || {
+        # If venv fails, fall back to --user install
+        warn "Could not create virtual environment, using --user install"
+        VENV_DIR=""
+    }
+fi
+
+if [ -n "$VENV_DIR" ]; then
+    # shellcheck disable=SC1091
+    source "$VENV_DIR/bin/activate"
+    PIP="$VENV_DIR/bin/pip"
+    ok "Virtual environment ready"
 else
-    fail "Installation failed. Try manually: pip install git+${REPO}"
+    PIP="$PYTHON -m pip"
+fi
+
+# ── Install taox ──────────────────────────────────────────────
+info "Installing taox..."
+if [ -n "$VENV_DIR" ]; then
+    if $PIP install "git+${REPO}" 2>&1 | tail -3; then
+        ok "taox installed"
+    else
+        fail "Installation failed. Try manually: pip install git+${REPO}"
+    fi
+else
+    if $PIP install --user "git+${REPO}" 2>&1 | tail -3; then
+        ok "taox installed"
+    else
+        fail "Installation failed. Try manually: pip install --user git+${REPO}"
+    fi
+fi
+
+# ── Install cffi (fixes WSL/Linux keyring issues) ────────────
+if [ -n "$VENV_DIR" ]; then
+    $PIP install cffi cryptography 2>/dev/null | tail -1 || true
+else
+    $PIP install --user cffi cryptography 2>/dev/null | tail -1 || true
+fi
+
+# ── Create wrapper script ───────────────────────────────────
+# If installed in a venv, create a wrapper so `taox` works globally
+if [ -n "$VENV_DIR" ]; then
+    WRAPPER="$HOME/.local/bin/taox"
+    mkdir -p "$HOME/.local/bin"
+    cat > "$WRAPPER" << 'WRAPPER_EOF'
+#!/usr/bin/env bash
+source "$HOME/.taox/venv/bin/activate" 2>/dev/null
+exec "$HOME/.taox/venv/bin/taox" "$@"
+WRAPPER_EOF
+    chmod +x "$WRAPPER"
+    ok "Created taox command"
 fi
 
 # ── Verify install ────────────────────────────────────────────
-if ! command -v taox &>/dev/null; then
-    # Might be in user-local bin not on PATH
-    LOCAL_BIN="$("$PYTHON" -m site --user-base 2>/dev/null)/bin"
-    if [ -f "$LOCAL_BIN/taox" ]; then
-        warn "taox installed to $LOCAL_BIN which is not on your PATH"
-        echo "    Add this to your shell profile:"
-        echo "    export PATH=\"$LOCAL_BIN:\$PATH\""
-        echo ""
-    else
-        warn "taox installed but not found on PATH. You may need to restart your shell."
-    fi
+TAOX_BIN=""
+if command -v taox &>/dev/null; then
+    TAOX_BIN="taox"
+elif [ -f "$HOME/.local/bin/taox" ]; then
+    TAOX_BIN="$HOME/.local/bin/taox"
+fi
+
+if [ -z "$TAOX_BIN" ]; then
+    warn "taox installed but not on PATH. Add this to your shell profile:"
+    echo "    export PATH=\"\$HOME/.local/bin:\$PATH\""
+    echo ""
+    echo "  Then restart your shell or run:"
+    echo "    source ~/.bashrc"
 fi
 
 # ── First-run setup ──────────────────────────────────────────
@@ -90,41 +154,43 @@ echo -e "${BOLD}  Quick Setup${RESET}"
 echo -e "${BOLD}────────────────────────────────────────${RESET}"
 echo ""
 
-# Chutes API key (for AI features)
+save_credential() {
+    local key="$1"
+    local value="$2"
+    mkdir -p "$TAOX_DIR"
+    # Remove old entry if exists, then append
+    if [ -f "$CRED_FILE" ]; then
+        grep -v "^${key}=" "$CRED_FILE" > "$CRED_FILE.tmp" 2>/dev/null || true
+        mv "$CRED_FILE.tmp" "$CRED_FILE"
+    fi
+    echo "${key}=${value}" >> "$CRED_FILE"
+    chmod 600 "$CRED_FILE"
+}
+
+# Chutes API key
 echo -e "${BOLD}Chutes AI API key${RESET} (powers natural language chat)"
 echo "  Get one free at: https://chutes.ai"
 echo ""
 read -rp "  Chutes API key (Enter to skip): " chutes_key
 
 if [ -n "$chutes_key" ]; then
-    "$PYTHON" -c "
-import keyring
-keyring.set_password('taox', 'chutes_api_key', '$chutes_key')
-print('  ✓ Saved to system keyring')
-" 2>/dev/null || {
-        # Fallback: save via taox config
-        warn "Keyring unavailable — you can set it later with: taox setup"
-    }
+    save_credential "chutes_api_key" "$chutes_key"
+    ok "Saved Chutes API key"
 else
     info "Skipped — taox will use pattern matching (no AI chat)"
 fi
 
 echo ""
 
-# Taostats API key (for network data)
+# Taostats API key
 echo -e "${BOLD}Taostats API key${RESET} (real-time network data)"
 echo "  Get one at: https://dash.taostats.io"
 echo ""
 read -rp "  Taostats API key (Enter to skip): " taostats_key
 
 if [ -n "$taostats_key" ]; then
-    "$PYTHON" -c "
-import keyring
-keyring.set_password('taox', 'taostats_api_key', '$taostats_key')
-print('  ✓ Saved to system keyring')
-" 2>/dev/null || {
-        warn "Keyring unavailable — you can set it later with: taox setup"
-    }
+    save_credential "taostats_api_key" "$taostats_key"
+    ok "Saved Taostats API key"
 else
     info "Skipped — taox will use limited/cached data"
 fi
@@ -145,3 +211,7 @@ echo "  Reconfigure anytime:"
 echo "    taox setup        # API keys"
 echo "    taox welcome      # wallet selection"
 echo ""
+if [ -z "$TAOX_BIN" ]; then
+    echo -e "  ${YELLOW}Don't forget to add ~/.local/bin to your PATH first!${RESET}"
+    echo ""
+fi
