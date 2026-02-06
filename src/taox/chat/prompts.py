@@ -47,7 +47,8 @@ Schema:
     "hotkey_name": "<string or null>",
     "config_key": "<'wallet' or 'hotkey' or 'netuid' or null>",
     "config_value": "<string or null>",
-    "price_only": <true if user is asking specifically about price/cost/value, false for full details>
+    "price_only": <true if user is asking specifically about price/cost/value, false for full details>,
+    "days": <integer or null, for portfolio_delta: how many days to look back>
   }},
   "reply": "<your conversational response - 1-3 sentences>",
   "needs_confirmation": <true for state-changing ops>,
@@ -72,6 +73,13 @@ State-changing (need confirmation):
 - "unstake" → Remove stake. Need: amount, validator hotkey, netuid.
 - "transfer" → Send TAO. Need: amount, destination (ss58).
 - "register" → Register on subnet. Need: netuid.
+
+Tools & diagnostics (no confirmation):
+- "doctor" → Run environment health check. Ready if: always. Use when user asks about setup status, if things are working, or wants diagnostics.
+- "portfolio_delta" → Show portfolio change over N days. Ready if: always (days defaults to 7). Use when user asks about portfolio performance, earnings, or changes over time. Extract days from phrases like "last 7 days", "past 30 days", "this week" (7d), "this month" (30d).
+- "recommend" → Get staking recommendations. Ready if: amount present. Use when user asks where to stake, wants validator suggestions, or asks for staking advice.
+- "watch" → Set up price/validator monitoring. Ready if: always. Use when user wants alerts or monitoring.
+- "rebalance" → Batch stake across top validators. Ready if: amount present. Needs confirmation. Use when user wants to spread/split/distribute stake.
 
 Config:
 - "set_config" → Update wallet/hotkey/netuid settings.
@@ -152,6 +160,30 @@ User: "whats the price of sn 18"
 
 User: "sn 100 price"
 {{"intent": "subnet_info", "slots": {{"netuid": 100, "price_only": true}}, "reply": "Fetching SN100 price...", "needs_confirmation": false, "missing_info": null, "ready_to_execute": true}}
+
+User: "how's my setup"
+{{"intent": "doctor", "slots": {{}}, "reply": "Running environment check...", "needs_confirmation": false, "missing_info": null, "ready_to_execute": true}}
+
+User: "is everything working"
+{{"intent": "doctor", "slots": {{}}, "reply": "Let me check your setup...", "needs_confirmation": false, "missing_info": null, "ready_to_execute": true}}
+
+User: "my portfolio last 7 days"
+{{"intent": "portfolio_delta", "slots": {{"days": 7}}, "reply": "Checking your portfolio changes over 7 days...", "needs_confirmation": false, "missing_info": null, "ready_to_execute": true}}
+
+User: "how much did i earn this month"
+{{"intent": "portfolio_delta", "slots": {{"days": 30}}, "reply": "Checking your portfolio performance over 30 days...", "needs_confirmation": false, "missing_info": null, "ready_to_execute": true}}
+
+User: "where should i stake 100 tao"
+{{"intent": "recommend", "slots": {{"amount": 100}}, "reply": "Finding the best validators for 100 τ...", "needs_confirmation": false, "missing_info": null, "ready_to_execute": true}}
+
+User: "recommend validators"
+{{"intent": "recommend", "slots": {{}}, "reply": "How much TAO are you looking to stake?", "needs_confirmation": false, "missing_info": "amount", "ready_to_execute": false}}
+
+User: "split 200 tao across top validators"
+{{"intent": "rebalance", "slots": {{"amount": 200}}, "reply": "Distribute 200 τ across top validators. Confirm?", "needs_confirmation": true, "missing_info": null, "ready_to_execute": true}}
+
+User: "watch tao price"
+{{"intent": "watch", "slots": {{}}, "reply": "Setting up price monitoring...", "needs_confirmation": false, "missing_info": null, "ready_to_execute": true}}
 
 # CURRENT CONTEXT
 Wallet: {wallet}

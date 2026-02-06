@@ -24,6 +24,11 @@ class IntentType(str, Enum):
     PRICE = "price"  # TAO price check
     HISTORY = "history"  # Transaction history
     SET_CONFIG = "set_config"  # Update settings like hotkey, wallet
+    DOCTOR = "doctor"  # Environment health check
+    PORTFOLIO_DELTA = "portfolio_delta"  # Portfolio change over time
+    RECOMMEND = "recommend"  # Staking recommendations
+    WATCH = "watch"  # Price/validator alerts
+    REBALANCE = "rebalance"  # Batch stake across validators
     HELP = "help"
     CONFIRM = "confirm"  # User confirming something
     GREETING = "greeting"  # Hello, hi, etc.
@@ -171,6 +176,44 @@ class MockIntentParser:
             r"what (?:have i|did i) (?:done|sent|transferred|staked)",
             r"(?:show |list )?(?:my )?(?:recent )?(?:activity|actions)",
         ],
+        IntentType.DOCTOR: [
+            r"doctor",
+            r"(?:check|diagnose|verify)\s+(?:my\s+)?(?:setup|environment|env|config)",
+            r"(?:how(?:'?s| is) )?(?:my )?(?:setup|environment|taox|config)",
+            r"(?:is )?(?:everything|my setup)\s+(?:ok|good|working|fine|ready)",
+            r"health\s*check",
+            r"what(?:'?s| is) (?:the )?(?:state|status) of (?:my )?(?:taox|setup|environment)",
+            r"am i (?:set up|ready|configured)",
+        ],
+        IntentType.PORTFOLIO_DELTA: [
+            r"portfolio\s+(?:last|past|in the last)\s+(\d+)\s*(?:d|day)",
+            r"(?:my )?portfolio\s+(?:change|delta|diff)\s*(?:(\d+)\s*d)?",
+            r"(?:how(?:'?s| is|'s) )?(?:my )?portfolio\s+(?:doing|changed|looking)\s+(?:(?:in |over )?(?:the\s+)?(?:last|past)\s+)?(\d+)\s*(?:d|day)",
+            r"(?:show |get )?(?:my )?(?:portfolio |stake )?(?:change|delta|performance)\s+(?:(?:last|past|over)\s+)?(\d+)\s*(?:d|day)",
+            r"(?:how much )?(?:have i |did i )?(?:earn|gain|lose|made)\s+(?:(?:in |over )?(?:the\s+)?(?:last|past)\s+)?(\d+)\s*(?:d|day)",
+            r"(?:what(?:'?s| is|'s) )?(?:my )?(?:7|30)\s*(?:d|day)\s+(?:change|delta|performance|returns?)",
+        ],
+        IntentType.RECOMMEND: [
+            r"recommend\s+(\d+(?:\.\d+)?)",
+            r"(?:where|how) should i (?:stake|put|invest)\s+(\d+(?:\.\d+)?)",
+            r"(?:best|top|good) validators?\s+(?:for|to stake)\s+(\d+(?:\.\d+)?)",
+            r"(?:suggest|advise|pick)\s+(?:a\s+)?validators?\s+(?:for\s+)?(\d+(?:\.\d+)?)?",
+            r"(?:stake|staking)\s+(?:recommendation|advice|suggestion)",
+            r"who should i (?:stake|delegate)\s+(?:to|with)",
+        ],
+        IntentType.WATCH: [
+            r"watch\s+(?:tao\s+)?price",
+            r"(?:alert|notify|tell)\s+(?:me\s+)?(?:when|if)\s+(?:tao\s+)?(?:price|tao)",
+            r"watch\s+(?:a\s+)?validator",
+            r"(?:monitor|watch|track)\s+(?:my\s+)?(?:price|portfolio|validators?|registration)",
+            r"set\s+(?:a\s+)?(?:price\s+)?alert",
+        ],
+        IntentType.REBALANCE: [
+            r"rebalance\s+(\d+(?:\.\d+)?)",
+            r"(?:batch|split|spread|distribute)\s+(?:stake\s+)?(\d+(?:\.\d+)?)\s*(?:tao)?",
+            r"stake\s+(\d+(?:\.\d+)?)\s*(?:tao)?\s+(?:across|to|between)\s+(?:multiple|top|several)\s+validators?",
+            r"(?:auto|smart)\s*(?:stake|rebalance)\s+(\d+(?:\.\d+)?)",
+        ],
         IntentType.HELP: [
             r"help",
             r"what (?:else )?can you do",
@@ -303,6 +346,28 @@ class MockIntentParser:
                             intent.hotkey_name = value
                             intent.extra["config_key"] = "hotkey"
                         intent.extra["config_value"] = value
+
+                    elif intent_type == IntentType.PORTFOLIO_DELTA:
+                        # Extract number of days from capture groups
+                        for g in (groups if groups else []):
+                            if g:
+                                with contextlib.suppress(ValueError):
+                                    intent.extra["days"] = int(g)
+                                    break
+                        if "days" not in intent.extra:
+                            intent.extra["days"] = 7  # Default
+
+                    elif intent_type in (
+                        IntentType.RECOMMEND,
+                        IntentType.REBALANCE,
+                    ):
+                        # Extract amount from first capture group
+                        if groups:
+                            for g in groups:
+                                if g:
+                                    with contextlib.suppress(ValueError):
+                                        intent.amount = float(g)
+                                        break
 
                     return intent
 

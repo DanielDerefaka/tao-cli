@@ -175,6 +175,21 @@ class Router:
             elif intent == IntentType.SET_CONFIG:
                 return self._exec_set_config(slots)
 
+            elif intent == IntentType.DOCTOR:
+                return await self._exec_doctor()
+
+            elif intent == IntentType.PORTFOLIO_DELTA:
+                return await self._exec_portfolio_delta(slots)
+
+            elif intent == IntentType.RECOMMEND:
+                return await self._exec_recommend(slots)
+
+            elif intent == IntentType.WATCH:
+                return self._exec_watch()
+
+            elif intent == IntentType.REBALANCE:
+                return await self._exec_rebalance(slots)
+
             elif intent == IntentType.HELP:
                 return ExecutionResult(success=True, message=self._get_help())
 
@@ -374,6 +389,215 @@ class Router:
 
         return ExecutionResult(success=True, message="History displayed above.")
 
+    async def _exec_doctor(self) -> ExecutionResult:
+        """Run environment health check and return summary."""
+        import shutil
+        from pathlib import Path
+
+        from taox.security.credentials import CredentialManager
+
+        checks_ok = []
+        issues = []
+
+        # Python
+        py_ver = f"{__import__('sys').version_info.major}.{__import__('sys').version_info.minor}"
+        checks_ok.append(f"Python {py_ver}")
+
+        # btcli
+        if shutil.which("btcli"):
+            checks_ok.append("btcli installed")
+        else:
+            issues.append("btcli not found — install with: pip install bittensor-cli")
+
+        # Wallets
+        wallet_path = Path.home() / ".bittensor" / "wallets"
+        if wallet_path.exists():
+            wallets = [w.name for w in wallet_path.iterdir() if w.is_dir()]
+            if wallets:
+                checks_ok.append(f"{len(wallets)} wallet(s): {', '.join(wallets[:3])}")
+            else:
+                issues.append("No wallets found")
+        else:
+            issues.append("No wallet directory found")
+
+        # API keys
+        if CredentialManager.get_chutes_key():
+            checks_ok.append("Chutes API key configured")
+        else:
+            issues.append("Chutes API key missing — run 'taox setup'")
+
+        if CredentialManager.get_taostats_key():
+            checks_ok.append("Taostats API key configured")
+        else:
+            issues.append("Taostats API key missing — run 'taox setup'")
+
+        # Network
+        try:
+            import httpx
+
+            with httpx.Client(timeout=5.0) as client:
+                resp = client.post(
+                    "https://entrypoint-finney.opentensor.ai:443",
+                    json={"jsonrpc": "2.0", "method": "system_health", "params": [], "id": 1},
+                )
+                if resp.status_code == 200:
+                    checks_ok.append("Finney RPC reachable")
+                else:
+                    issues.append("Finney RPC returned error")
+        except Exception:
+            issues.append("Cannot reach Finney RPC")
+
+        # Build response
+        parts = []
+        if checks_ok:
+            parts.append("**Passing:** " + " | ".join(checks_ok))
+        if issues:
+            parts.append("**Issues:** " + " | ".join(issues))
+        else:
+            parts.append("All checks passed! Your setup looks good.")
+
+        return ExecutionResult(success=True, message="\n".join(parts))
+
+    async def _exec_portfolio_delta(self, slots: Slots) -> ExecutionResult:
+        """Show portfolio change over N days."""
+        from taox.data.snapshots import PortfolioSnapshot, PositionSnapshot, get_snapshot_store
+
+        days = slots.days or 7
+        wallet_name = slots.wallet_name or self.settings.bittensor.default_wallet
+
+        # Get current portfolio data
+        from taox.commands.stake import show_portfolio
+
+        result = await show_portfolio(
+            self.taostats,
+            self.sdk,
+            wallet_name=wallet_name,
+            suppress_output=True,
+        )
+
+        if not result:
+            return ExecutionResult(
+                success=False,
+                message=f"Could not load portfolio for wallet '{wallet_name}'.",
+            )
+
+        # Build and save snapshot
+        store = get_snapshot_store()
+        from datetime import datetime
+
+        positions = [
+            PositionSnapshot(
+                netuid=p.get("netuid", 0),
+                hotkey=p.get("hotkey", ""),
+                validator_name=p.get("hotkey_name"),
+                stake=p.get("stake", 0),
+                alpha_balance=p.get("alpha_balance", 0),
+            )
+            for p in result.get("positions", [])
+        ]
+
+        snapshot = PortfolioSnapshot(
+            timestamp=datetime.now().isoformat(),
+            coldkey=result.get("coldkey", ""),
+            free_balance=result.get("free_balance", 0),
+            total_staked=result.get("staked_total", 0),
+            total_value=result.get("total_balance", 0),
+            tao_price_usd=result.get("usd_price", 0),
+            usd_value=result.get("usd_value", 0),
+            positions=positions,
+        )
+
+        if snapshot.coldkey:
+            store.save_snapshot(snapshot)
+
+        # Compute delta
+        delta = store.compute_delta(snapshot.coldkey, days, snapshot)
+        if not delta:
+            return ExecutionResult(
+                success=True,
+                message=f"No historical data for {days}d comparison yet. "
+                f"Run 'taox portfolio' daily to build history. "
+                f"Current value: {result.get('total_balance', 0):,.4f} τ "
+                f"(${result.get('usd_value', 0):,.2f})",
+            )
+
+        # Build natural language summary
+        change_symbol = "+" if delta.total_value_change >= 0 else ""
+        parts = [
+            f"**Portfolio Change ({days}d):** {change_symbol}{delta.total_value_change:,.4f} τ "
+            f"({change_symbol}{delta.total_value_change_percent:.1f}%)",
+            f"Free balance: {'+' if delta.free_balance_change >= 0 else ''}{delta.free_balance_change:,.4f} τ",
+            f"Staked: {'+' if delta.total_staked_change >= 0 else ''}{delta.total_staked_change:,.4f} τ",
+            f"USD: {'+' if delta.usd_value_change >= 0 else ''}${delta.usd_value_change:,.2f}",
+        ]
+
+        if delta.best_performer:
+            bp = delta.best_performer
+            name = bp.validator_name or f"SN{bp.netuid}"
+            parts.append(f"Best: {name} (+{bp.stake_change:,.4f} τ)")
+
+        if delta.estimated_rewards > 0:
+            parts.append(f"Est. rewards: +{delta.estimated_rewards:,.4f} τ")
+
+        return ExecutionResult(success=True, message="\n".join(parts))
+
+    async def _exec_recommend(self, slots: Slots) -> ExecutionResult:
+        """Get staking recommendations."""
+        from taox.commands.recommend import stake_recommend
+
+        if not slots.amount:
+            return ExecutionResult(
+                success=False,
+                message="How much TAO would you like recommendations for?",
+            )
+
+        await stake_recommend(
+            taostats=self.taostats,
+            amount=slots.amount,
+            netuid=slots.netuid or 1,
+        )
+
+        return ExecutionResult(
+            success=True,
+            message=f"Recommendations for {slots.amount} τ displayed above.",
+        )
+
+    def _exec_watch(self) -> ExecutionResult:
+        """Show watch/alert info."""
+        return ExecutionResult(
+            success=True,
+            message="Use `taox watch` to set up monitoring:\n"
+            '• `taox watch --price ">500"` — TAO price alert\n'
+            "• `taox watch --validator taostats` — validator tracking\n"
+            "• `taox watch --registration 0.5 --netuid 1` — cheap registration alert\n"
+            "• `taox watch --list` — show active alerts",
+        )
+
+    async def _exec_rebalance(self, slots: Slots) -> ExecutionResult:
+        """Execute batch rebalance."""
+        from taox.commands.batch import stake_rebalance
+
+        if not slots.amount:
+            return ExecutionResult(
+                success=False,
+                message="How much TAO to rebalance?",
+            )
+
+        await stake_rebalance(
+            executor=self.executor,
+            sdk=self.sdk,
+            taostats=self.taostats,
+            amount=slots.amount,
+            netuid=slots.netuid or 1,
+            wallet_name=slots.wallet_name,
+            dry_run=self.settings.demo_mode,
+        )
+
+        return ExecutionResult(
+            success=True,
+            message=f"Rebalanced {slots.amount} τ across top validators.",
+        )
+
     def _exec_set_config(self, slots: Slots) -> ExecutionResult:
         """Update configuration."""
         from taox.chat.state_machine import UserPreferences
@@ -415,11 +639,16 @@ class Router:
 
 • "what's my balance?" - Check your TAO
 • "show my portfolio" - See stake positions
+• "my portfolio last 7 days" - See earnings over time
+• "how's my setup?" - Run environment check
 • "stake 10 TAO to taostats on subnet 1" - Stake
+• "where should I stake 100 TAO?" - Get recommendations
+• "split 200 TAO across top validators" - Batch stake
 • "transfer 5 TAO to 5xxx..." - Send TAO
 • "show validators on subnet 1" - List validators
 • "list subnets" - Show all subnets
 • "register on subnet 24" - Register
+• "watch tao price" - Set up alerts
 • "my hotkey is dx_hot" - Update settings
 
 Just ask naturally - I'll figure out what you need!"""

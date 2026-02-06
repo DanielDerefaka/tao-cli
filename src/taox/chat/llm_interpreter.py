@@ -50,6 +50,13 @@ class IntentType(str, Enum):
     # Config
     SET_CONFIG = "set_config"
 
+    # Diagnostics & tools
+    DOCTOR = "doctor"
+    PORTFOLIO_DELTA = "portfolio_delta"
+    RECOMMEND = "recommend"
+    WATCH = "watch"
+    REBALANCE = "rebalance"
+
     # Meta
     HELP = "help"
     GREETING = "greeting"
@@ -71,6 +78,7 @@ class Slots(BaseModel):
     config_key: Optional[str] = None  # For SET_CONFIG
     config_value: Optional[str] = None
     price_only: bool = False  # For SUBNET_INFO: show price only vs full details
+    days: Optional[int] = None  # For PORTFOLIO_DELTA: number of days to compare
 
 
 class LLMResponse(BaseModel):
@@ -247,6 +255,9 @@ class LLMInterpreter:
                 if slots.get("netuid") is not None:
                     with contextlib.suppress(ValueError, TypeError):
                         slots["netuid"] = int(slots["netuid"])
+                if slots.get("days") is not None:
+                    with contextlib.suppress(ValueError, TypeError):
+                        slots["days"] = int(slots["days"])
 
             response = LLMResponse(**data)
 
@@ -290,6 +301,11 @@ class LLMInterpreter:
             OldIntent.PRICE: IntentType.PRICE,
             OldIntent.HISTORY: IntentType.HISTORY,
             OldIntent.SET_CONFIG: IntentType.SET_CONFIG,
+            OldIntent.DOCTOR: IntentType.DOCTOR,
+            OldIntent.PORTFOLIO_DELTA: IntentType.PORTFOLIO_DELTA,
+            OldIntent.RECOMMEND: IntentType.RECOMMEND,
+            OldIntent.WATCH: IntentType.WATCH,
+            OldIntent.REBALANCE: IntentType.REBALANCE,
             OldIntent.HELP: IntentType.HELP,
             OldIntent.GREETING: IntentType.GREETING,
             OldIntent.UNKNOWN: IntentType.UNCLEAR,
@@ -310,6 +326,7 @@ class LLMInterpreter:
             config_key=old_intent.extra.get("config_key"),
             config_value=old_intent.extra.get("config_value"),
             price_only=old_intent.extra.get("price_only", False),
+            days=old_intent.extra.get("days"),
         )
 
         # Generate SET_CONFIG reply
@@ -342,6 +359,19 @@ class LLMInterpreter:
             ),
             IntentType.TRANSFER: "Transfer — specify amount and destination address.",
             IntentType.SET_CONFIG: set_config_reply,
+            IntentType.DOCTOR: "Running environment check...",
+            IntentType.PORTFOLIO_DELTA: f"Checking portfolio changes over {slots.days or 7} days...",
+            IntentType.RECOMMEND: (
+                f"Finding best validators for {slots.amount} τ..."
+                if slots.amount
+                else "How much TAO would you like staking recommendations for?"
+            ),
+            IntentType.WATCH: "Setting up monitoring...",
+            IntentType.REBALANCE: (
+                f"Planning rebalance for {slots.amount} τ..."
+                if slots.amount
+                else "How much TAO to rebalance across validators?"
+            ),
             IntentType.GREETING: "Hey! What can I help you with?",
             IntentType.HELP: "Here's what I can do...",
             IntentType.UNCLEAR: "Not sure what you mean. Try 'help' for options.",
@@ -361,6 +391,9 @@ class LLMInterpreter:
             IntentType.HISTORY,
             IntentType.METAGRAPH,
             IntentType.CONVERSATION,
+            IntentType.DOCTOR,
+            IntentType.PORTFOLIO_DELTA,
+            IntentType.WATCH,
         )
 
         # For transactions, check if we have required slots
@@ -372,6 +405,8 @@ class LLMInterpreter:
             ready = slots.netuid is not None
         elif intent == IntentType.SET_CONFIG:
             ready = slots.config_key is not None and slots.config_value is not None
+        elif intent in (IntentType.RECOMMEND, IntentType.REBALANCE):
+            ready = slots.amount is not None
 
         # If not ready, adjust reply to prompt for missing info
         if not ready and intent not in (IntentType.UNCLEAR, IntentType.GREETING, IntentType.HELP):
@@ -382,7 +417,13 @@ class LLMInterpreter:
             slots=slots,
             reply=reply,
             needs_confirmation=intent
-            in (IntentType.STAKE, IntentType.UNSTAKE, IntentType.TRANSFER, IntentType.REGISTER),
+            in (
+                IntentType.STAKE,
+                IntentType.UNSTAKE,
+                IntentType.TRANSFER,
+                IntentType.REGISTER,
+                IntentType.REBALANCE,
+            ),
             ready_to_execute=ready,
         )
 

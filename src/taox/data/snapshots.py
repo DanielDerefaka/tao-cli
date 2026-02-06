@@ -208,6 +208,14 @@ class SnapshotStore:
                 min_diff = diff
                 closest = snap
 
+        # Reject if the closest snapshot is too far from the target date.
+        # E.g. if asking for 7d ago but the only snapshot is from today,
+        # that's not a valid comparison — return None so the caller
+        # can tell the user to build more history first.
+        max_distance_seconds = max(2, days_ago // 2) * 86400
+        if min_diff > max_distance_seconds:
+            return None
+
         return closest
 
     def get_snapshots_in_range(
