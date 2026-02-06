@@ -46,7 +46,7 @@ from taox.ui.onboarding import (
     show_welcome_banner,
 )
 from taox.ui.prompts import confirm, input_amount, input_netuid
-from taox.ui.theme import Symbols
+from taox.ui.theme import Symbols, TaoxColors
 
 # Create Typer app
 app = typer.Typer(
@@ -804,19 +804,246 @@ def wallets():
 @app.command()
 def portfolio(
     wallet_name: Optional[str] = typer.Option(None, "--wallet", "-w", help="Wallet name"),
+    delta: Optional[str] = typer.Option(None, "--delta", "-d", help="Show change over time (e.g., 7d, 30d)"),
+    history: Optional[str] = typer.Option(None, "--history", "-h", help="Show history (e.g., 7d, 30d)"),
+    share: bool = typer.Option(False, "--share", "-s", help="Redact addresses for sharing"),
+    json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
 ):
     """Show portfolio with balances and stake positions.
 
     Displays free balance, staked amounts, USD values, and position breakdown.
+    Automatically saves a daily snapshot for historical tracking.
 
     [green]Examples:[/green]
         taox portfolio
         taox portfolio --wallet my_wallet
+        taox portfolio --delta 7d
+        taox portfolio --history 30d
+        taox portfolio --share
     """
+    from taox.data.snapshots import (
+        PortfolioSnapshot,
+        PositionSnapshot,
+        get_snapshot_store,
+    )
+
     wallet_name = get_wallet_name(wallet_name)
     taostats = TaostatsClient()
     sdk = BittensorSDK()
-    asyncio.run(stake_cmds.show_portfolio(taostats, sdk, wallet_name=wallet_name))
+
+    async def _portfolio_with_snapshots():
+        # Get current portfolio
+        result = await stake_cmds.show_portfolio(
+            taostats, sdk, wallet_name=wallet_name,
+            share_mode=share, json_output=json_output,
+            suppress_output=(delta is not None or history is not None),
+        )
+
+        if not result:
+            return
+
+        # Save snapshot
+        store = get_snapshot_store()
+        positions = [
+            PositionSnapshot(
+                netuid=p.get("netuid", 0),
+                hotkey=p.get("hotkey", ""),
+                validator_name=p.get("hotkey_name"),
+                stake=p.get("stake", 0),
+                alpha_balance=p.get("alpha_balance", 0),
+            )
+            for p in result.get("positions", [])
+        ]
+
+        snapshot = PortfolioSnapshot(
+            timestamp=datetime.now().isoformat(),
+            coldkey=result.get("coldkey", ""),
+            free_balance=result.get("free_balance", 0),
+            total_staked=result.get("staked_total", 0),
+            total_value=result.get("total_balance", 0),
+            tao_price_usd=result.get("usd_price", 0),
+            usd_value=result.get("usd_value", 0),
+            positions=positions,
+        )
+
+        if snapshot.coldkey:
+            store.save_snapshot(snapshot)
+
+        # Handle delta view
+        if delta:
+            days = _parse_days(delta)
+            if days:
+                delta_result = store.compute_delta(snapshot.coldkey, days, snapshot)
+                if delta_result:
+                    _display_portfolio_delta(delta_result, share_mode=share, json_output=json_output)
+                else:
+                    console.print(f"[muted]No historical data available for {days}d comparison.[/muted]")
+                    console.print("[muted]Run 'taox portfolio' daily to build history.[/muted]")
+
+        # Handle history view
+        elif history:
+            days = _parse_days(history)
+            if days:
+                history_data = store.get_history(snapshot.coldkey, days)
+                if history_data:
+                    _display_portfolio_history(history_data, days, share_mode=share, json_output=json_output)
+                else:
+                    console.print(f"[muted]No historical data available for the last {days} days.[/muted]")
+
+    from datetime import datetime
+    asyncio.run(_portfolio_with_snapshots())
+
+
+def _parse_days(time_str: str) -> Optional[int]:
+    """Parse time string like '7d' or '30d' to days."""
+    time_str = time_str.lower().strip()
+    if time_str.endswith("d"):
+        try:
+            return int(time_str[:-1])
+        except ValueError:
+            pass
+    # Try just the number
+    try:
+        return int(time_str)
+    except ValueError:
+        console.print(f"[error]Invalid time format: {time_str}. Use format like '7d' or '30d'.[/error]")
+        return None
+
+
+def _display_portfolio_delta(delta, share_mode: bool = False, json_output: bool = False):
+    """Display portfolio delta."""
+    import json as json_module
+
+    from rich.panel import Panel
+    from rich.table import Table
+
+    from taox.ui.console import redact_address
+
+    if json_output:
+        output = {
+            "days": delta.days,
+            "from": delta.from_timestamp,
+            "to": delta.to_timestamp,
+            "total_value_change": delta.total_value_change,
+            "total_value_change_percent": delta.total_value_change_percent,
+            "free_balance_change": delta.free_balance_change,
+            "total_staked_change": delta.total_staked_change,
+            "usd_value_change": delta.usd_value_change,
+            "tao_price_change_percent": delta.tao_price_change_percent,
+            "estimated_rewards": delta.estimated_rewards,
+            "best_performer": {
+                "netuid": delta.best_performer.netuid,
+                "validator": delta.best_performer.validator_name,
+                "change": delta.best_performer.stake_change,
+                "change_percent": delta.best_performer.stake_change_percent,
+            } if delta.best_performer else None,
+            "worst_performer": {
+                "netuid": delta.worst_performer.netuid,
+                "validator": delta.worst_performer.validator_name,
+                "change": delta.worst_performer.stake_change,
+                "change_percent": delta.worst_performer.stake_change_percent,
+            } if delta.worst_performer else None,
+        }
+        print(json_module.dumps(output, indent=2))
+        return
+
+    # Rich output
+    change_color = "success" if delta.total_value_change >= 0 else "error"
+    change_symbol = "+" if delta.total_value_change >= 0 else ""
+
+    console.print()
+    console.print(
+        Panel(
+            f"[bold]Portfolio Change - Last {delta.days} Days[/bold]",
+            box=box.ROUNDED,
+            border_style="primary",
+        )
+    )
+    console.print()
+
+    # Summary table
+    table = Table(box=box.SIMPLE, show_header=False, padding=(0, 2))
+    table.add_column("Metric", style="bold")
+    table.add_column("Change", justify="right")
+
+    table.add_row(
+        "Total Value",
+        f"[{change_color}]{change_symbol}{delta.total_value_change:,.4f} τ ({change_symbol}{delta.total_value_change_percent:.1f}%)[/{change_color}]"
+    )
+    table.add_row(
+        "Free Balance",
+        f"{'+' if delta.free_balance_change >= 0 else ''}{delta.free_balance_change:,.4f} τ"
+    )
+    table.add_row(
+        "Total Staked",
+        f"{'+' if delta.total_staked_change >= 0 else ''}{delta.total_staked_change:,.4f} τ"
+    )
+    table.add_row(
+        "USD Value",
+        f"[{change_color}]{change_symbol}${delta.usd_value_change:,.2f}[/{change_color}]"
+    )
+    table.add_row(
+        "TAO Price",
+        f"{'+' if delta.tao_price_change_percent >= 0 else ''}{delta.tao_price_change_percent:.1f}%"
+    )
+
+    if delta.estimated_rewards > 0:
+        table.add_row(
+            "Est. Rewards",
+            f"[success]+{delta.estimated_rewards:,.4f} τ[/success]"
+        )
+
+    console.print(table)
+    console.print()
+
+    # Best/worst performers
+    if delta.best_performer:
+        bp = delta.best_performer
+        name = bp.validator_name or (redact_address(bp.hotkey) if share_mode else bp.hotkey[:12] + "...")
+        console.print(f"[success]Best performer:[/success] SN{bp.netuid} ({name}): +{bp.stake_change:,.4f} τ ({bp.stake_change_percent:+.1f}%)")
+
+    if delta.worst_performer and delta.worst_performer.stake_change < 0:
+        wp = delta.worst_performer
+        name = wp.validator_name or (redact_address(wp.hotkey) if share_mode else wp.hotkey[:12] + "...")
+        console.print(f"[error]Worst performer:[/error] SN{wp.netuid} ({name}): {wp.stake_change:,.4f} τ ({wp.stake_change_percent:+.1f}%)")
+
+    console.print()
+
+
+def _display_portfolio_history(history: list, days: int, share_mode: bool = False, json_output: bool = False):
+    """Display portfolio history."""
+    import json as json_module
+
+    from rich.table import Table
+
+    if json_output:
+        print(json_module.dumps(history, indent=2))
+        return
+
+    console.print()
+    console.print(f"[bold]Portfolio History - Last {days} Days[/bold]")
+    console.print()
+
+    table = Table(box=box.ROUNDED, border_style=TaoxColors.BORDER)
+    table.add_column("Date", style="muted")
+    table.add_column("Total TAO", justify="right", style="tao")
+    table.add_column("Free", justify="right")
+    table.add_column("Staked", justify="right")
+    table.add_column("Price", justify="right", style="info")
+    table.add_column("USD Value", justify="right", style="muted")
+
+    for entry in history:
+        table.add_row(
+            entry["date"],
+            f"{entry['total_tao']:,.4f} τ",
+            f"{entry['free_balance']:,.4f} τ",
+            f"{entry['total_staked']:,.4f} τ",
+            f"${entry['tao_price']:,.2f}",
+            f"${entry['usd_value']:,.2f}",
+        )
+
+    console.print(table)
+    console.print()
 
 
 @app.command()
@@ -892,6 +1119,45 @@ def stake(
 
 
 @app.command()
+def recommend(
+    amount: float = typer.Argument(..., help="Amount of TAO to stake"),
+    netuid: int = typer.Option(1, "--netuid", "-n", help="Subnet ID"),
+    top: int = typer.Option(5, "--top", "-t", help="Number of top validators to show"),
+    diversify: int = typer.Option(1, "--diversify", "-d", help="Number of validators to split across (0=auto)"),
+    risk: str = typer.Option("med", "--risk", "-r", help="Risk level: low, med, high"),
+    share: bool = typer.Option(False, "--share", "-s", help="Redact addresses for sharing"),
+    json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
+):
+    """Get smart staking recommendations.
+
+    Analyzes validators and provides explainable recommendations with
+    diversification advice.
+
+    [green]Examples:[/green]
+        taox recommend 100
+        taox recommend 100 --netuid 1
+        taox recommend 500 --diversify 3 --risk low
+        taox recommend 100 --json
+        taox recommend 100 --share
+    """
+    from taox.commands.recommend import stake_recommend
+
+    taostats = TaostatsClient()
+    asyncio.run(
+        stake_recommend(
+            taostats=taostats,
+            amount=amount,
+            netuid=netuid,
+            top_n=top,
+            diversify=diversify,
+            risk_level=risk,
+            share_mode=share,
+            json_output=json_output,
+        )
+    )
+
+
+@app.command()
 def validators(
     netuid: Optional[int] = typer.Option(None, "--netuid", "-n", help="Subnet ID"),
     limit: int = typer.Option(10, "--limit", "-l", help="Number of validators to show"),
@@ -952,6 +1218,66 @@ def dashboard(
     from taox.ui.dashboard import run_dashboard
 
     run_dashboard(wallet_name=wallet_name, refresh_interval=refresh)
+
+
+@app.command(name="watch")
+def watch_cmd(
+    price: Optional[str] = typer.Option(
+        None, "--price", "-p", help="Price alert (e.g., 'TAO:500', '>500', '<400')"
+    ),
+    validator: Optional[str] = typer.Option(
+        None, "--validator", "-v", help="Validator name or hotkey to watch"
+    ),
+    registration: Optional[float] = typer.Option(
+        None, "--registration", "-r", help="Alert when registration burn cost <= value"
+    ),
+    netuid: int = typer.Option(1, "--netuid", "-n", help="Subnet ID for validator/registration alerts"),
+    interval: int = typer.Option(30, "--interval", "-i", help="Polling interval in seconds"),
+    duration: Optional[int] = typer.Option(None, "--duration", "-d", help="Run for N seconds (default: indefinitely)"),
+    list_alerts: bool = typer.Option(False, "--list", "-l", help="List all configured alerts"),
+    clear: bool = typer.Option(False, "--clear", help="Clear all alert rules"),
+    json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
+):
+    """Watch mode with alerts.
+
+    Monitor prices, validators, and registration windows with alerts.
+
+    [green]Examples:[/green]
+        taox watch                           # Watch with existing alerts
+        taox watch --price TAO:500           # Alert when TAO >= $500
+        taox watch --price "<400"            # Alert when TAO <= $400
+        taox watch --validator taostats -n 1 # Watch validator on SN1
+        taox watch --registration 1.0 -n 18  # Alert when SN18 burn <= 1 TAO
+        taox watch --list                    # List all alerts
+        taox watch --clear                   # Remove all alerts
+    """
+    from taox.commands.watch import clear_alerts, watch
+    from taox.commands.watch import list_alerts as show_alerts
+
+    # Handle list
+    if list_alerts:
+        show_alerts(json_output=json_output)
+        return
+
+    # Handle clear
+    if clear:
+        count = clear_alerts()
+        console.print(f"[success]Cleared {count} alert rule(s).[/success]")
+        return
+
+    taostats = TaostatsClient()
+    asyncio.run(
+        watch(
+            taostats=taostats,
+            price_alert=price,
+            validator_alert=validator,
+            registration_alert=registration,
+            netuid=netuid,
+            poll_interval=interval,
+            duration=duration,
+            json_output=json_output,
+        )
+    )
 
 
 @app.command()
@@ -1163,46 +1489,144 @@ def history(
 
 
 @app.command()
+def rebalance(
+    amount: float = typer.Argument(..., help="Total amount of TAO to stake"),
+    netuid: int = typer.Option(1, "--netuid", "-n", help="Subnet ID"),
+    top: int = typer.Option(5, "--top", "-t", help="Number of top validators"),
+    mode: str = typer.Option("equal", "--mode", "-m", help="Mode: equal, weighted, top_heavy"),
+    chunk_size: int = typer.Option(3, "--chunk", "-c", help="Operations per chunk"),
+    dry_run: bool = typer.Option(False, "--dry-run", "-d", help="Show plan only"),
+    skip_confirm: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation"),
+    wallet_name: Optional[str] = typer.Option(None, "--wallet", "-w", help="Wallet name"),
+    share: bool = typer.Option(False, "--share", "-s", help="Redact addresses"),
+    json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
+):
+    """Batch stake across multiple validators.
+
+    Distributes stake across top validators with chunking to avoid rate limits.
+
+    Modes:
+    - equal: Split evenly among validators
+    - weighted: Proportional to validator stake
+    - top_heavy: 50% to top validator, rest split evenly
+
+    [green]Examples:[/green]
+        taox rebalance 100
+        taox rebalance 100 --top 3
+        taox rebalance 500 --mode top_heavy
+        taox rebalance 100 --dry-run
+        taox rebalance 100 --yes
+    """
+    from taox.commands.batch import stake_rebalance
+
+    wallet_name = get_wallet_name(wallet_name)
+    taostats = TaostatsClient()
+    sdk = BittensorSDK()
+    executor = BtcliExecutor()
+
+    asyncio.run(
+        stake_rebalance(
+            executor=executor,
+            sdk=sdk,
+            taostats=taostats,
+            amount=amount,
+            netuid=netuid,
+            top_n=top,
+            mode=mode,
+            wallet_name=wallet_name,
+            chunk_size=chunk_size,
+            dry_run=dry_run,
+            skip_confirm=skip_confirm,
+            share_mode=share,
+            json_output=json_output,
+        )
+    )
+
+
+@app.command()
 def doctor(
     verbose: bool = typer.Option(
         False, "--verbose", "-v", help="Show detailed dependency versions"
     ),
+    network: str = typer.Option("finney", "--network", "-n", help="Network to check"),
+    wallet_name: Optional[str] = typer.Option(
+        None, "--wallet", "-w", help="Wallet to check (overrides default)"
+    ),
+    hotkey_name: Optional[str] = typer.Option(
+        None, "--hotkey", "-k", help="Hotkey to check (overrides default)"
+    ),
+    json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
 ):
     """Check environment and diagnose issues.
 
     Verifies that taox is properly configured with all dependencies.
+    Shows a checklist of checks and fix commands for any issues found.
 
     [green]Examples:[/green]
         taox doctor
         taox doctor --verbose
+        taox doctor --network finney --wallet mywall
+        taox doctor --json
     """
+    import json
     import shutil
     import subprocess
+    import time
     from pathlib import Path
 
-    console.print()
-    console.print(
-        Panel(
-            "[primary]taox[/primary] Environment Check",
-            box=box.ROUNDED,
-            border_style="primary",
-        )
-    )
-    console.print()
+    settings = get_settings()
 
-    checks = []
-    warnings = []
-    errors = []
+    # Use provided wallet/hotkey or defaults
+    check_wallet = wallet_name or settings.bittensor.default_wallet
+    check_hotkey = hotkey_name or settings.bittensor.default_hotkey
 
-    # 1. Check Python version
+    # Collect results
+    checks = []  # Passing checks
+    warnings = []  # Non-critical issues
+    errors = []  # Critical issues
+    fix_commands = []  # Suggested fixes
 
+    # For JSON output
+    results = {
+        "status": "ok",
+        "checks": {},
+        "warnings": [],
+        "errors": [],
+        "fix_commands": [],
+    }
+
+    # Helper to add check result
+    def add_check(name: str, passed: bool, message: str, fix: str = None):
+        results["checks"][name] = {"passed": passed, "message": message}
+        if passed:
+            checks.append(f"{Symbols.CHECK} {message}")
+        else:
+            if fix:
+                warnings.append(f"{Symbols.WARN} {message}")
+                results["warnings"].append(message)
+                if fix not in fix_commands:
+                    fix_commands.append(fix)
+            else:
+                errors.append(f"{Symbols.ERROR} {message}")
+                results["errors"].append(message)
+                results["status"] = "error"
+
+    # === A) Environment Checks ===
+
+    # 1. Python version
     py_version = f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
-    checks.append(f"{Symbols.CHECK} Python version: {py_version}")
+    py_ok = sys.version_info >= (3, 10)
+    add_check(
+        "python",
+        py_ok,
+        f"Python version: {py_version}" + ("" if py_ok else " (requires 3.10+)"),
+        "Install Python 3.10 or higher" if not py_ok else None,
+    )
 
-    # 2. Check taox version
-    checks.append(f"{Symbols.CHECK} taox version: {__version__}")
+    # 2. taox version
+    add_check("taox", True, f"taox version: {__version__}")
 
-    # 3. Check btcli installation
+    # 3. btcli installation
     btcli_path = shutil.which("btcli")
     if btcli_path:
         try:
@@ -1210,94 +1634,199 @@ def doctor(
                 ["btcli", "--version"], capture_output=True, text=True, timeout=10
             )
             btcli_version = result.stdout.strip() or result.stderr.strip()
-            checks.append(
-                f"{Symbols.CHECK} btcli installed: {btcli_version.split()[-1] if btcli_version else 'unknown version'}"
-            )
+            version_str = btcli_version.split()[-1] if btcli_version else "unknown"
+            add_check("btcli", True, f"btcli installed: {version_str}")
         except Exception:
-            checks.append(f"{Symbols.CHECK} btcli installed: {btcli_path}")
+            add_check("btcli", True, f"btcli installed: {btcli_path}")
     else:
-        errors.append(f"{Symbols.ERROR} btcli not found - install with: pip install bittensor-cli")
+        add_check(
+            "btcli",
+            False,
+            "btcli not found",
+            "pip install bittensor-cli",
+        )
 
-    # 4. Check wallet directory and default wallet/hotkey
-    settings = get_settings()
+    # 4. Required dependencies check
+    required_deps = ["pexpect", "keyring", "httpx", "pydantic"]
+    missing_deps = []
+    for dep in required_deps:
+        try:
+            __import__(dep)
+        except ImportError:
+            missing_deps.append(dep)
+
+    if missing_deps:
+        add_check(
+            "dependencies",
+            False,
+            f"Missing dependencies: {', '.join(missing_deps)}",
+            f"pip install {' '.join(missing_deps)}",
+        )
+    else:
+        add_check("dependencies", True, "Required dependencies: installed")
+
+    # === B) Wallet Path Checks ===
+
     wallet_path = Path.home() / ".bittensor" / "wallets"
     if wallet_path.exists():
-        wallets = list(wallet_path.iterdir())
-        wallet_dirs = [w for w in wallets if w.is_dir()]
-        wallet_count = len(wallet_dirs)
+        wallets = [w for w in wallet_path.iterdir() if w.is_dir()]
+        wallet_count = len(wallets)
+
         if wallet_count > 0:
-            checks.append(f"{Symbols.CHECK} Wallet directory: {wallet_count} wallet(s) found")
+            add_check("wallet_dir", True, f"Wallet directory: {wallet_count} wallet(s) found")
 
-            # Check default wallet exists
-            default_wallet = settings.bittensor.default_wallet
-            default_wallet_path = wallet_path / default_wallet
-            if default_wallet_path.exists():
-                checks.append(f"{Symbols.CHECK} Default wallet '{default_wallet}': exists")
+            # Check specified wallet exists
+            wallet_dir = wallet_path / check_wallet
+            if wallet_dir.exists():
+                add_check("wallet", True, f"Wallet '{check_wallet}': exists")
 
-                # Check default hotkey exists
-                default_hotkey = settings.bittensor.default_hotkey
-                hotkey_path = default_wallet_path / "hotkeys" / default_hotkey
-                if hotkey_path.exists():
-                    checks.append(f"{Symbols.CHECK} Default hotkey '{default_hotkey}': exists")
+                # Check specified hotkey exists
+                hotkey_file = wallet_dir / "hotkeys" / check_hotkey
+                if hotkey_file.exists():
+                    add_check("hotkey", True, f"Hotkey '{check_hotkey}': exists")
                 else:
-                    warnings.append(
-                        f"{Symbols.WARN} Default hotkey '{default_hotkey}' not found in wallet '{default_wallet}'"
+                    add_check(
+                        "hotkey",
+                        False,
+                        f"Hotkey '{check_hotkey}' not found in wallet '{check_wallet}'",
+                        f"btcli wallet new_hotkey --wallet.name {check_wallet} --wallet.hotkey {check_hotkey}",
                     )
             else:
-                warnings.append(f"{Symbols.WARN} Default wallet '{default_wallet}' not found")
+                add_check(
+                    "wallet",
+                    False,
+                    f"Wallet '{check_wallet}' not found",
+                    f"btcli wallet new_coldkey --wallet.name {check_wallet}",
+                )
         else:
-            warnings.append(f"{Symbols.WARN} Wallet directory exists but no wallets found")
+            add_check(
+                "wallet_dir",
+                False,
+                "Wallet directory exists but no wallets found",
+                "btcli wallet new_coldkey --wallet.name default",
+            )
     else:
-        warnings.append(f"{Symbols.WARN} Wallet directory not found: {wallet_path}")
+        add_check(
+            "wallet_dir",
+            False,
+            f"Wallet directory not found: {wallet_path}",
+            "btcli wallet new_coldkey --wallet.name default",
+        )
 
-    # 5. Check config directory
-    config_path = Path.home() / ".taox"
-    if config_path.exists():
-        checks.append(f"{Symbols.CHECK} Config directory: {config_path}")
-    else:
-        warnings.append(f"{Symbols.WARN} Config directory not found (will be created on first run)")
+    # === C) Network/RPC Checks ===
 
-    # 6. Check API keys
-    chutes_key = CredentialManager.get_chutes_key()
-    if chutes_key:
-        checks.append(f"{Symbols.CHECK} Chutes API key: configured")
-    else:
-        warnings.append(f"{Symbols.WARN} Chutes API key: not configured (run 'taox setup')")
+    # Determine RPC endpoint based on network
+    rpc_endpoints = {
+        "finney": "https://entrypoint-finney.opentensor.ai:443",
+        "test": "https://test.finney.opentensor.ai:443",
+        "local": "http://127.0.0.1:9944",
+    }
+    rpc_url = rpc_endpoints.get(network, rpc_endpoints["finney"])
 
-    taostats_key = CredentialManager.get_taostats_key()
-    if taostats_key:
-        checks.append(f"{Symbols.CHECK} Taostats API key: configured")
-    else:
-        warnings.append(f"{Symbols.WARN} Taostats API key: not configured (run 'taox setup')")
+    if not json_output:
+        console.print("[muted]Checking network connectivity...[/muted]", end="\r")
 
-    # 7. Check demo mode
-    if settings.demo_mode:
-        warnings.append(f"{Symbols.WARN} Demo mode: enabled (no real transactions)")
-    else:
-        checks.append(f"{Symbols.CHECK} Demo mode: disabled")
-
-    # 8. Check RPC endpoint reachability (finney)
-    console.print("[muted]Checking network connectivity...[/muted]", end="\r")
     try:
         import httpx
 
+        start_time = time.time()
         with httpx.Client(timeout=5.0) as client:
             response = client.post(
-                "https://entrypoint-finney.opentensor.ai:443",
+                rpc_url,
                 json={"jsonrpc": "2.0", "method": "system_health", "params": [], "id": 1},
                 headers={"Content-Type": "application/json"},
             )
+            latency_ms = (time.time() - start_time) * 1000
+
             if response.status_code == 200:
-                checks.append(f"{Symbols.CHECK} Finney RPC endpoint: reachable")
+                add_check(
+                    "rpc",
+                    True,
+                    f"{network.capitalize()} RPC: reachable ({latency_ms:.0f}ms)",
+                )
+                results["checks"]["rpc"]["latency_ms"] = latency_ms
             else:
-                warnings.append(
-                    f"{Symbols.WARN} Finney RPC endpoint: returned {response.status_code}"
+                add_check(
+                    "rpc",
+                    False,
+                    f"{network.capitalize()} RPC: returned {response.status_code}",
+                    "Check your internet connection or try again later",
                 )
     except Exception as e:
-        warnings.append(f"{Symbols.WARN} Finney RPC endpoint: unreachable ({type(e).__name__})")
-    console.print(" " * 40, end="\r")  # Clear the status line
+        add_check(
+            "rpc",
+            False,
+            f"{network.capitalize()} RPC: unreachable ({type(e).__name__})",
+            "Check your internet connection or firewall settings",
+        )
 
-    # 9. Check rate limit status (backoff manager)
+    if not json_output:
+        console.print(" " * 50, end="\r")  # Clear status line
+
+    # === D) API Key Checks ===
+
+    chutes_key = CredentialManager.get_chutes_key()
+    taostats_key = CredentialManager.get_taostats_key()
+    llm_mode = settings.llm.mode
+
+    # Chutes key: required only when llm_mode=always
+    if chutes_key:
+        add_check("chutes_api", True, "Chutes API key: configured")
+    elif llm_mode == "always":
+        add_check(
+            "chutes_api",
+            False,
+            "Chutes API key: missing (required for AI mode)",
+            "taox setup",
+        )
+    else:
+        add_check(
+            "chutes_api",
+            False,
+            "Chutes API key: not configured (AI features limited)",
+            "taox setup",
+        )
+
+    # Taostats key: always optional
+    if taostats_key:
+        add_check("taostats_api", True, "Taostats API key: configured")
+    else:
+        add_check(
+            "taostats_api",
+            False,
+            "Taostats API key: not configured (using limited data)",
+            "taox setup",
+        )
+
+    # === E) Safety Config Checks ===
+
+    # Demo mode
+    if settings.demo_mode:
+        add_check(
+            "demo_mode",
+            False,
+            "Demo mode: enabled (no real transactions)",
+            "Set TAOX_DEMO_MODE=false or edit ~/.taox/config.yml",
+        )
+    else:
+        add_check("demo_mode", True, "Demo mode: disabled")
+
+    # LLM mode status
+    add_check("llm_mode", True, f"LLM mode: {llm_mode}")
+
+    # Config directory
+    config_path = Path.home() / ".taox"
+    if config_path.exists():
+        add_check("config", True, f"Config directory: {config_path}")
+    else:
+        add_check(
+            "config",
+            False,
+            "Config directory not found",
+            "taox setup  # Will create config automatically",
+        )
+
+    # Rate limit status
     try:
         from taox.data.cache import backoff_manager
 
@@ -1309,24 +1838,55 @@ def doctor(
                     active_backoffs.append(f"{key}: {retry_after:.0f}s")
 
         if active_backoffs:
-            warnings.append(f"{Symbols.WARN} Rate limited: {', '.join(active_backoffs)}")
+            add_check(
+                "rate_limits",
+                False,
+                f"Rate limited: {', '.join(active_backoffs)}",
+                "Wait for rate limit to expire",
+            )
         else:
-            checks.append(f"{Symbols.CHECK} Rate limits: none active")
+            add_check("rate_limits", True, "Rate limits: none active")
     except Exception:
-        pass  # Backoff check is optional
+        pass
 
-    # 10. Check optional bittensor SDK
+    # Bittensor SDK (optional)
     try:
         import bittensor
 
         bt_version = getattr(bittensor, "__version__", "unknown")
-        checks.append(f"{Symbols.CHECK} Bittensor SDK: {bt_version}")
+        add_check("bittensor_sdk", True, f"Bittensor SDK: {bt_version}")
     except ImportError:
-        warnings.append(
-            f"{Symbols.WARN} Bittensor SDK: not installed (optional, install with: pip install bittensor)"
+        add_check(
+            "bittensor_sdk",
+            False,
+            "Bittensor SDK: not installed (optional)",
+            "pip install bittensor",
         )
 
-    # Display results
+    # Collect fix commands
+    results["fix_commands"] = fix_commands
+
+    # === Output ===
+
+    if json_output:
+        # JSON output mode
+        print(json.dumps(results, indent=2))
+        if results["status"] == "error":
+            raise typer.Exit(1)
+        return
+
+    # Rich output mode
+    console.print()
+    console.print(
+        Panel(
+            "[primary]taox[/primary] Environment Check",
+            box=box.ROUNDED,
+            border_style="primary",
+        )
+    )
+    console.print()
+
+    # Display checks
     console.print("[bold]Checks:[/bold]")
     for check in checks:
         console.print(f"  {check}")
@@ -1343,7 +1903,7 @@ def doctor(
         for error in errors:
             console.print(f"  {error}")
 
-    # Verbose: Show key dependency versions
+    # Verbose: Show dependency versions
     if verbose:
         console.print()
         console.print("[bold]Dependency Versions:[/bold]")
@@ -1364,6 +1924,13 @@ def doctor(
                 console.print(f"  {Symbols.CHECK} {name}: {version}")
             except ImportError:
                 console.print(f"  {Symbols.ERROR} {name}: not installed")
+
+    # Fix Commands Section
+    if fix_commands:
+        console.print()
+        console.print("[bold]Fix Commands:[/bold]")
+        for i, cmd in enumerate(fix_commands, 1):
+            console.print(f"  {i}. [command]{cmd}[/command]")
 
     # Summary
     console.print()

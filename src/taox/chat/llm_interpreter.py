@@ -11,7 +11,7 @@ the primary decision maker, not a fallback. It orchestrates:
 import json
 import logging
 from enum import Enum
-from typing import Any, Optional
+from typing import Optional
 
 from openai import OpenAI
 from pydantic import BaseModel, Field, ValidationError
@@ -37,6 +37,7 @@ class IntentType(str, Enum):
     # Network info
     VALIDATORS = "validators"
     SUBNETS = "subnets"
+    SUBNET_INFO = "subnet_info"
     METAGRAPH = "metagraph"
     PRICE = "price"
 
@@ -69,6 +70,7 @@ class Slots(BaseModel):
     hotkey_name: Optional[str] = None
     config_key: Optional[str] = None  # For SET_CONFIG
     config_value: Optional[str] = None
+    price_only: bool = False  # For SUBNET_INFO: show price only vs full details
 
 
 class LLMResponse(BaseModel):
@@ -82,82 +84,8 @@ class LLMResponse(BaseModel):
     ready_to_execute: bool = False  # All required slots filled
 
 
-# System prompt that makes the LLM understand its role
-# Note: Double braces {{ }} are escaped for Python .format() - they become single braces in output
-SYSTEM_PROMPT = """You are taox, an AI assistant for Bittensor. You help users manage their TAO - checking balances, staking, transfers, and more.
-
-IMPORTANT RULES:
-1. Be conversational and friendly, but concise (1-3 sentences)
-2. ALWAYS respond with valid JSON matching the schema below
-3. Extract intent and slots from user messages
-4. If info is missing, ask ONE clarifying question in your reply
-5. Never ask for seed phrases or private keys
-6. Use τ symbol for TAO amounts
-
-YOUR CAPABILITIES:
-- balance: Check wallet balance
-- portfolio: Show stake positions
-- stake: Stake TAO to validators
-- unstake: Remove stake
-- transfer: Send TAO to addresses
-- validators: List top validators
-- subnets: List subnets
-- metagraph: Show subnet metagraph
-- price: Current TAO price
-- register: Register on subnet
-- history: Transaction history
-- set_config: Update settings (hotkey, wallet)
-- help: Show help
-- greeting: Respond to greetings
-- conversation: General Bittensor chat
-- unclear: Need more info
-
-JSON SCHEMA (respond with ONLY this JSON, no markdown):
-{{
-  "intent": "<intent_type>",
-  "slots": {{
-    "amount": <number or null>,
-    "amount_all": <boolean>,
-    "validator_name": "<string or null>",
-    "validator_hotkey": "<string or null>",
-    "netuid": <number or null>,
-    "destination": "<ss58 address or null>",
-    "wallet_name": "<string or null>",
-    "hotkey_name": "<string or null>",
-    "config_key": "<string or null>",
-    "config_value": "<string or null>"
-  }},
-  "reply": "<your conversational response>",
-  "needs_confirmation": <boolean - true for transactions>,
-  "missing_info": "<what's missing, or null>",
-  "ready_to_execute": <boolean - true if all required slots filled>
-}}
-
-EXAMPLES:
-
-User: "hey whats good"
-{{"intent": "greeting", "slots": {{}}, "reply": "Hey! Ready to help with your TAO. What do you need?", "needs_confirmation": false, "missing_info": null, "ready_to_execute": false}}
-
-User: "stake 10 tao to taostats on subnet 1"
-{{"intent": "stake", "slots": {{"amount": 10, "validator_name": "taostats", "netuid": 1}}, "reply": "Got it! Stake 10 τ to Taostats on SN1. Confirm?", "needs_confirmation": true, "missing_info": null, "ready_to_execute": true}}
-
-User: "i want to stake some tao"
-{{"intent": "stake", "slots": {{}}, "reply": "Sure! How much TAO and to which validator?", "needs_confirmation": false, "missing_info": "amount and validator", "ready_to_execute": false}}
-
-User: "my hotkey is dx_hot"
-{{"intent": "set_config", "slots": {{"config_key": "hotkey", "config_value": "dx_hot"}}, "reply": "Got it! Updated hotkey to dx_hot.", "needs_confirmation": false, "missing_info": null, "ready_to_execute": true}}
-
-User: "how much tao do i have"
-{{"intent": "balance", "slots": {{}}, "reply": "Let me check your balance.", "needs_confirmation": false, "missing_info": null, "ready_to_execute": true}}
-
-User: "what is bittensor"
-{{"intent": "conversation", "slots": {{}}, "reply": "Bittensor is a decentralized AI network where miners contribute compute and validators ensure quality. TAO is its native token.", "needs_confirmation": false, "missing_info": null, "ready_to_execute": false}}
-
-CURRENT CONTEXT:
-Wallet: {wallet}
-Hotkey: {hotkey}
-Network: {network}
-"""
+# Import the comprehensive prompt from prompts module
+from taox.chat.prompts import SYSTEM_PROMPT
 
 
 class LLMInterpreter:
@@ -246,7 +174,7 @@ class LLMInterpreter:
 
             content = response.choices[0].message.content
             if content is None:
-                logger.warning("LLM returned empty content")
+                logger.debug("LLM returned empty content")
                 return self._fallback_interpret(user_input)
 
             content = content.strip()
@@ -254,20 +182,18 @@ class LLMInterpreter:
 
             # Check if response looks incomplete
             if len(content) < 20 or ('"intent"' in content and "}" not in content):
-                logger.warning(f"LLM response appears truncated: {content[:100]}")
+                logger.debug(f"LLM response appears truncated: {content[:100]}")
                 return self._fallback_interpret(user_input)
 
             return self._parse_response(content, user_input)
 
         except Exception as e:
-            logger.warning(f"LLM interpret failed: {type(e).__name__}: {e}")
+            logger.debug(f"LLM interpret failed: {type(e).__name__}: {e}")
             return self._fallback_interpret(user_input)
 
     def _parse_response(self, content: str, original_input: str) -> LLMResponse:
         """Parse and validate LLM response."""
         import re
-
-        original_content = content  # Keep for debugging
 
         # Strip markdown code blocks if present
         if "```" in content:
@@ -311,16 +237,13 @@ class LLMInterpreter:
             if "slots" in data and isinstance(data["slots"], dict):
                 slots = data["slots"]
                 # Convert string numbers to float/int
+                import contextlib
                 if slots.get("amount") is not None:
-                    try:
+                    with contextlib.suppress(ValueError, TypeError):
                         slots["amount"] = float(slots["amount"])
-                    except (ValueError, TypeError):
-                        pass
                 if slots.get("netuid") is not None:
-                    try:
+                    with contextlib.suppress(ValueError, TypeError):
                         slots["netuid"] = int(slots["netuid"])
-                    except (ValueError, TypeError):
-                        pass
 
             response = LLMResponse(**data)
 
@@ -333,7 +256,7 @@ class LLMInterpreter:
             return response
 
         except (json.JSONDecodeError, ValidationError, KeyError, TypeError) as e:
-            logger.warning(f"Failed to parse LLM response: {type(e).__name__}: {e}")
+            logger.debug(f"Failed to parse LLM response: {type(e).__name__}: {e}")
             logger.debug(f"Content to parse: {content[:300]}")
             # Return a safe fallback
             return LLMResponse(
@@ -358,8 +281,10 @@ class LLMInterpreter:
             OldIntent.TRANSFER: IntentType.TRANSFER,
             OldIntent.VALIDATORS: IntentType.VALIDATORS,
             OldIntent.SUBNETS: IntentType.SUBNETS,
+            OldIntent.SUBNET_INFO: IntentType.SUBNET_INFO,
             OldIntent.METAGRAPH: IntentType.METAGRAPH,
             OldIntent.REGISTER: IntentType.REGISTER,
+            OldIntent.PRICE: IntentType.PRICE,
             OldIntent.HISTORY: IntentType.HISTORY,
             OldIntent.SET_CONFIG: IntentType.SET_CONFIG,
             OldIntent.HELP: IntentType.HELP,
@@ -379,15 +304,32 @@ class LLMInterpreter:
             destination=old_intent.destination,
             wallet_name=old_intent.wallet_name,
             hotkey_name=old_intent.hotkey_name,
+            config_key=old_intent.extra.get("config_key"),
+            config_value=old_intent.extra.get("config_value"),
+            price_only=old_intent.extra.get("price_only", False),
         )
+
+        # Generate SET_CONFIG reply
+        if intent == IntentType.SET_CONFIG and slots.config_key and slots.config_value:
+            config_label = "wallet" if slots.config_key == "wallet" else "hotkey"
+            set_config_reply = f"Updated {config_label} to {slots.config_value}."
+        else:
+            set_config_reply = "What setting would you like to change? (e.g. 'my wallet is dx')"
 
         # Generate reply based on intent
         replies = {
             IntentType.BALANCE: "Checking your balance...",
             IntentType.PORTFOLIO: "Loading your portfolio...",
+            IntentType.PRICE: "Fetching TAO price...",
             IntentType.STAKE: f"Staking {slots.amount or '?'} τ...",
             IntentType.VALIDATORS: "Fetching validators...",
             IntentType.SUBNETS: "Loading subnets...",
+            IntentType.SUBNET_INFO: f"Fetching subnet {slots.netuid} info..." if slots.netuid else "Which subnet? (e.g. 'sn 1' or 'subnet 64')",
+            IntentType.METAGRAPH: "Loading metagraph...",
+            IntentType.HISTORY: "Loading transaction history...",
+            IntentType.REGISTER: "Register on subnet " + (str(slots.netuid) if slots.netuid else "— which subnet? (e.g. 'register on subnet 1')"),
+            IntentType.TRANSFER: "Transfer — specify amount and destination address.",
+            IntentType.SET_CONFIG: set_config_reply,
             IntentType.GREETING: "Hey! What can I help you with?",
             IntentType.HELP: "Here's what I can do...",
             IntentType.UNCLEAR: "Not sure what you mean. Try 'help' for options.",
@@ -405,6 +347,8 @@ class LLMInterpreter:
             IntentType.HELP,
             IntentType.GREETING,
             IntentType.HISTORY,
+            IntentType.METAGRAPH,
+            IntentType.CONVERSATION,
         )
 
         # For transactions, check if we have required slots
@@ -412,8 +356,14 @@ class LLMInterpreter:
             ready = slots.amount is not None and slots.validator_name is not None
         elif intent == IntentType.TRANSFER:
             ready = slots.amount is not None and slots.destination is not None
-        elif intent == IntentType.REGISTER:
+        elif intent == IntentType.REGISTER or intent == IntentType.SUBNET_INFO:
             ready = slots.netuid is not None
+        elif intent == IntentType.SET_CONFIG:
+            ready = slots.config_key is not None and slots.config_value is not None
+
+        # If not ready, adjust reply to prompt for missing info
+        if not ready and intent not in (IntentType.UNCLEAR, IntentType.GREETING, IntentType.HELP):
+            reply = replies.get(intent, "I need more details. Try 'help' for examples.")
 
         return LLMResponse(
             intent=intent,

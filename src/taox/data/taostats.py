@@ -60,6 +60,17 @@ class Subnet:
 
 
 @dataclass
+class SubnetPool:
+    """Subnet pool / alpha token pricing info."""
+
+    netuid: int
+    alpha_in_pool: float  # Alpha tokens in pool
+    tao_in_pool: float  # TAO in pool
+    alpha_price_in_tao: float  # Price of 1 alpha in TAO
+    alpha_price_in_usd: float  # Price of 1 alpha in USD (needs TAO price)
+
+
+@dataclass
 class PriceInfo:
     """TAO price information."""
 
@@ -569,6 +580,77 @@ class TaostatsClient:
             if subnet.netuid == netuid:
                 return subnet
         return None
+
+    async def get_subnet_pool(self, netuid: int) -> Optional[SubnetPool]:
+        """Get subnet pool data (alpha token pricing).
+
+        Args:
+            netuid: Subnet ID
+
+        Returns:
+            SubnetPool with pricing info, or None
+        """
+        if self.settings.demo_mode or not self.is_available:
+            # Mock pool data for known subnets
+            mock_pools = {
+                0: SubnetPool(0, 1000000, 5000000, 5.0, 0),
+                1: SubnetPool(1, 800000, 2400000, 3.0, 0),
+                18: SubnetPool(18, 500000, 750000, 1.5, 0),
+                64: SubnetPool(64, 300000, 660000, 2.2, 0),
+            }
+            pool = mock_pools.get(netuid)
+            if pool:
+                # Fill in USD price from TAO price
+                try:
+                    tao_price = await self.get_price()
+                    pool.alpha_price_in_usd = pool.alpha_price_in_tao * tao_price.usd
+                except Exception:
+                    pass
+            return pool
+
+        try:
+            client = await self._get_client()
+            response = await client.get(
+                "/dtao/pool/latest/v1", params={"netuid": netuid}
+            )
+            response.raise_for_status()
+            data = response.json()
+
+            items = data.get("data", [])
+            if isinstance(items, list) and len(items) > 0:
+                item = items[0]
+            elif isinstance(items, dict):
+                item = items
+            else:
+                return None
+
+            # Parse pool amounts (may be in rao)
+            alpha_raw = float(item.get("alpha_in", item.get("alpha_in_pool", 0)))
+            tao_raw = float(item.get("tao_in", item.get("tao_in_pool", item.get("total_tao", 0))))
+
+            # Convert from rao if values are very large
+            # Rao values are 1e9x larger than TAO — no pool has 1B+ TAO
+            alpha_in = alpha_raw / 1e9 if alpha_raw > 1e9 else alpha_raw
+            tao_in = tao_raw / 1e9 if tao_raw > 1e9 else tao_raw
+
+            # Alpha price = tao_in_pool / alpha_in_pool
+            alpha_price = tao_in / alpha_in if alpha_in > 0 else 0
+
+            # Get TAO price for USD conversion
+            tao_price = await self.get_price()
+            usd_price = alpha_price * tao_price.usd
+
+            return SubnetPool(
+                netuid=netuid,
+                alpha_in_pool=alpha_in,
+                tao_in_pool=tao_in,
+                alpha_price_in_tao=alpha_price,
+                alpha_price_in_usd=usd_price,
+            )
+
+        except Exception as e:
+            logger.debug(f"Failed to fetch subnet pool for netuid {netuid}: {e}")
+            return None
 
     async def get_price(self) -> PriceInfo:
         """Get current TAO price.

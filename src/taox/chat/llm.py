@@ -220,10 +220,10 @@ class LLMClient:
             )
 
         except json.JSONDecodeError as e:
-            logger.warning(f"Failed to parse LLM response as JSON: {e}")
+            logger.debug(f"Failed to parse LLM response as JSON: {e}")
             return MockIntentParser.parse(user_input)
         except Exception as e:
-            logger.warning(f"LLM parsing failed, using mock parser: {e}")
+            logger.debug(f"LLM parsing failed, using mock parser: {e}")
             return MockIntentParser.parse(user_input)
 
     async def parse_intent_async(self, user_input: str, context: ConversationContext) -> Intent:
@@ -287,7 +287,7 @@ class LLMClient:
             )
 
         except Exception as e:
-            logger.warning(f"Async LLM parsing failed: {e}")
+            logger.debug(f"Async LLM parsing failed: {e}")
             return MockIntentParser.parse(user_input)
 
     def interpret_error(self, error: str, intent: Optional[Intent] = None) -> dict:
@@ -332,7 +332,7 @@ class LLMClient:
             return json.loads(content)
 
         except Exception as e:
-            logger.warning(f"Error interpretation failed: {e}")
+            logger.debug(f"Error interpretation failed: {e}")
             return self._mock_error_interpretation(error)
 
     def _mock_error_interpretation(self, error: str) -> dict:

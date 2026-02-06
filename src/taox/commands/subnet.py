@@ -60,7 +60,7 @@ async def show_subnet_info(
     sdk: BittensorSDK,
     netuid: int,
 ) -> Optional[Subnet]:
-    """Show detailed information about a subnet.
+    """Show detailed information about a subnet including token price.
 
     Args:
         taostats: TaostatsClient instance
@@ -72,23 +72,90 @@ async def show_subnet_info(
     """
     with console.status(f"[bold green]Fetching subnet {netuid} info..."):
         subnet = await taostats.get_subnet(netuid)
+        pool = await taostats.get_subnet_pool(netuid)
 
     if not subnet:
         print_error(f"Subnet {netuid} not found")
         return None
 
+    name = subnet.name or "Unknown"
     console.print()
-    console.print(f"[primary]Subnet {netuid}[/primary]")
-    console.print(f"[bold]Name:[/bold] {subnet.name or 'Unknown'}")
+    console.print(f"[primary]Subnet {netuid} — {name}[/primary]")
+
+    # Token price section
+    if pool:
+        console.print(
+            f"[bold]Token Price:[/bold] {pool.alpha_price_in_tao:.4f} τ "
+            f"(${pool.alpha_price_in_usd:.2f})"
+        )
+        console.print(
+            f"[bold]Pool:[/bold] {pool.tao_in_pool:,.0f} τ / "
+            f"{pool.alpha_in_pool:,.0f} α"
+        )
+
     console.print(f"[bold]Emission:[/bold] {subnet.emission * 100:.2f}%")
     console.print(f"[bold]Tempo:[/bold] {subnet.tempo} blocks")
-    console.print(f"[bold]Difficulty:[/bold] {subnet.difficulty:,.0f}")
     console.print(f"[bold]Burn Cost:[/bold] {format_tao(subnet.burn_cost)}")
-    console.print(f"[bold]Total Stake:[/bold] {format_tao(subnet.total_stake)}")
     console.print(f"[bold]Validators:[/bold] {subnet.validators}")
     console.print()
 
     return subnet
+
+
+async def get_subnet_info_text(
+    taostats: TaostatsClient,
+    netuid: int,
+    brief: bool = False,
+) -> str:
+    """Get subnet info as a formatted text string (for chat replies).
+
+    Args:
+        taostats: TaostatsClient instance
+        netuid: Subnet ID
+        brief: If True, only show name + price (for price queries)
+
+    Returns:
+        Formatted string with subnet details
+    """
+    subnet = await taostats.get_subnet(netuid)
+    pool = await taostats.get_subnet_pool(netuid)
+
+    if not subnet:
+        return f"Subnet {netuid} not found."
+
+    name = subnet.name or "Unknown"
+
+    # Brief mode: just name + price
+    if brief:
+        if pool:
+            return (
+                f"[bold]SN{netuid} ({name})[/bold] — "
+                f"[tao]{pool.alpha_price_in_tao:.4f} τ[/tao] "
+                f"(${pool.alpha_price_in_usd:.2f})"
+            )
+        return f"[bold]SN{netuid} ({name})[/bold] — price data unavailable"
+
+    # Full details
+    parts = [f"[bold]Subnet {netuid} — {name}[/bold]"]
+
+    if pool:
+        parts.append(
+            f"Token price: [tao]{pool.alpha_price_in_tao:.4f} τ[/tao] "
+            f"(${pool.alpha_price_in_usd:.2f})"
+        )
+        parts.append(
+            f"Pool: {pool.tao_in_pool:,.0f} τ / {pool.alpha_in_pool:,.0f} α"
+        )
+
+    emission_pct = f"{subnet.emission * 100:.2f}%" if subnet.emission else "0%"
+    parts.append(f"Emission: {emission_pct}")
+
+    if subnet.burn_cost:
+        parts.append(f"Reg cost: {subnet.burn_cost:.4f} τ")
+
+    parts.append(f"Validators: {subnet.validators}")
+
+    return "\n".join(parts)
 
 
 async def show_metagraph(

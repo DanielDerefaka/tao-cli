@@ -71,3 +71,6 @@ cache/
 # Docs build
 docs/_build/
 site/
+
+# Internal prompt packs
+taox_prompt_pack*/

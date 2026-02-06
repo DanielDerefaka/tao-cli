@@ -71,6 +71,7 @@ class Symbols:
     TAO = "τ"
     CHECK = "✓"
     CROSS = "✗"
+    ERROR = "✗"
     ARROW = "→"
     BULLET = "•"
     STAR = "★"
@@ -83,3 +84,12 @@ class Symbols:
     TRANSFER = "🔄"
     SUBNET = "🌐"
     ALPHA = "α"
+    # Tx lifecycle
+    PENDING = "⏳"
+    SIGNING = "✍️"
+    BROADCAST = "📡"
+    IN_BLOCK = "📦"
+    FINALIZED = "✅"
+    FAILED = "❌"
+    # Next steps
+    NEXT = "➜"

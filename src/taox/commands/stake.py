@@ -302,6 +302,9 @@ async def show_portfolio(
     sdk: BittensorSDK,
     wallet_name: Optional[str] = None,
     coldkey: Optional[str] = None,
+    share_mode: bool = False,
+    json_output: bool = False,
+    suppress_output: bool = False,
 ) -> dict:
     """Show comprehensive portfolio with USD values.
 
@@ -310,12 +313,18 @@ async def show_portfolio(
         sdk: BittensorSDK instance
         wallet_name: Wallet name (optional)
         coldkey: Coldkey SS58 address (optional, overrides wallet)
+        share_mode: If True, redact addresses for sharing
+        json_output: If True, output as JSON
+        suppress_output: If True, don't print output (just return data)
 
     Returns:
         Portfolio data dict
     """
+    import json
+
     from rich.panel import Panel
 
+    from taox.ui.console import redact_address, redact_wallet_name
     from taox.ui.theme import Symbols
 
     settings = get_settings()
@@ -362,13 +371,64 @@ async def show_portfolio(
     usd_price = price_info.usd
     price_change = price_info.change_24h
 
+    total_alpha = 0.0
+    for pos in positions:
+        total_alpha += pos.get("alpha_balance", 0)
+
+    # Build result
+    result = {
+        "wallet_name": wallet_name,
+        "coldkey": coldkey,
+        "free_balance": free_balance,
+        "staked_total": staked_total,
+        "total_balance": total_balance,
+        "total_alpha": total_alpha,
+        "usd_price": usd_price,
+        "usd_value": total_balance * usd_price,
+        "positions": positions,
+    }
+
+    # Suppress output if requested (for delta/history views)
+    if suppress_output:
+        return result
+
+    # JSON output
+    if json_output:
+        output = {
+            "wallet_name": redact_wallet_name(wallet_name) if share_mode else wallet_name,
+            "address": redact_address(coldkey) if share_mode else coldkey,
+            "free_balance": free_balance,
+            "staked_total": staked_total,
+            "total_balance": total_balance,
+            "total_alpha": total_alpha,
+            "tao_price_usd": usd_price,
+            "price_change_24h": price_change,
+            "usd_value": total_balance * usd_price,
+            "positions": [
+                {
+                    "netuid": p.get("netuid"),
+                    "validator": p.get("hotkey_name") or validator_names.get(p.get("hotkey", ""), "Unknown"),
+                    "hotkey": redact_address(p.get("hotkey", "")) if share_mode else p.get("hotkey"),
+                    "stake": p.get("stake", 0),
+                    "alpha_balance": p.get("alpha_balance", 0),
+                }
+                for p in positions
+            ],
+        }
+        print(json.dumps(output, indent=2))
+        return result
+
     # Price change indicator
     change_color = "success" if price_change >= 0 else "error"
     change_symbol = "+" if price_change >= 0 else ""
 
+    # Display values (potentially redacted)
+    display_wallet = redact_wallet_name(wallet_name) if share_mode else wallet_name
+    display_address = redact_address(coldkey) if share_mode else format_address(coldkey, truncate=False)
+
     # Header panel
-    header = f"""[bold]Wallet:[/bold] {wallet_name or 'N/A'}
-[bold]Address:[/bold] {format_address(coldkey, truncate=False)}
+    header = f"""[bold]Wallet:[/bold] {display_wallet or 'N/A'}
+[bold]Address:[/bold] {display_address}
 [bold]TAO Price:[/bold] [tao]${usd_price:,.2f}[/tao] [{change_color}]({change_symbol}{price_change:.1f}%)[/{change_color}]"""
 
     console.print(Panel(header, title="[primary]Portfolio Overview[/primary]", box=box.ROUNDED))
@@ -413,20 +473,19 @@ async def show_portfolio(
         pos_table.add_column("Value", justify="right", style="muted")
         pos_table.add_column("Share", justify="right", style="info")
 
-        total_alpha = 0.0
         for pos in sorted(positions, key=lambda p: p.get("stake", 0), reverse=True):
             netuid = pos.get("netuid", "?")
             hotkey = pos.get("hotkey", "")
             stake = pos.get("stake", 0)
             alpha_balance = pos.get("alpha_balance", 0)
-            total_alpha += alpha_balance
 
             subnet_names.get(netuid, f"SN{netuid}")
-            validator_name = (
-                pos.get("hotkey_name") or validator_names.get(hotkey) or format_address(hotkey)
-            )
+            validator_name = pos.get("hotkey_name") or validator_names.get(hotkey)
+            if not validator_name:
+                validator_name = redact_address(hotkey) if share_mode else format_address(hotkey)
+
             usd_value = stake * usd_price
-            share = (stake / staked_total * 100) if staked_total > 0 else 0
+            share_pct = (stake / staked_total * 100) if staked_total > 0 else 0
 
             pos_table.add_row(
                 f"SN{netuid}",
@@ -438,7 +497,7 @@ async def show_portfolio(
                 f"{stake:,.4f} τ",
                 f"{alpha_balance:,.4f} α",
                 f"${usd_value:,.2f}",
-                f"{share:.1f}%",
+                f"{share_pct:.1f}%",
             )
 
         console.print(pos_table)
@@ -449,17 +508,12 @@ async def show_portfolio(
     else:
         console.print("[muted]No stake positions found.[/muted]")
 
-    return {
-        "wallet_name": wallet_name,
-        "coldkey": coldkey,
-        "free_balance": free_balance,
-        "staked_total": staked_total,
-        "total_balance": total_balance,
-        "total_alpha": total_alpha if positions else 0.0,
-        "usd_price": usd_price,
-        "usd_value": total_balance * usd_price,
-        "positions": positions,
-    }
+    # Share mode notice
+    if share_mode:
+        console.print()
+        console.print("[muted]Share mode: addresses have been redacted[/muted]")
+
+    return result
 
 
 def stake_wizard(

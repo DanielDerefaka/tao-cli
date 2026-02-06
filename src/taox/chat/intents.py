@@ -20,6 +20,8 @@ class IntentType(str, Enum):
     INFO = "info"
     VALIDATORS = "validators"
     SUBNETS = "subnets"
+    SUBNET_INFO = "subnet_info"  # Individual subnet lookup (price, details)
+    PRICE = "price"  # TAO price check
     HISTORY = "history"  # Transaction history
     SET_CONFIG = "set_config"  # Update settings like hotkey, wallet
     HELP = "help"
@@ -71,8 +73,19 @@ class MockIntentParser:
     Uses regex to extract intents without requiring an LLM.
     """
 
-    # Patterns for intent detection
+    # Patterns for intent detection (ORDER MATTERS — checked top to bottom)
     PATTERNS = {
+        # Config MUST be before VALIDATORS (prevents "set wallet to validator" misfire)
+        IntentType.SET_CONFIG: [
+            # Wallet/coldkey patterns — require explicit set/change/is verbs
+            r"(?:my |the )?(?:wallet|coldkey)\s+(?:is|should be|=)\s+(\w+)",
+            r"(?:set|use|change)\s+(?:my\s+)?(?:wallet|coldkey)\s+(?:to\s+)?(\w+)",
+            # Hotkey patterns — require explicit set/change/is verbs
+            r"(?:my |the )?hotkey\s+(?:is|should be|=)\s+(\w+)",
+            r"(?:set|use|change)\s+(?:my\s+)?hotkey\s+(?:to\s+)?(\w+)",
+            # Generic "using" pattern
+            r"(?:i(?:'m| am)\s+)?using\s+(?:hotkey|wallet|coldkey)\s+(\w+)",
+        ],
         IntentType.STAKE: [
             r"stake\s+(\d+(?:\.\d+)?)\s*(?:tao)?\s*(?:to\s+)?(.+?)(?:\s+on\s+(?:subnet\s*)?(\d+))?$",
             r"add\s+stake\s+(\d+(?:\.\d+)?)",
@@ -121,23 +134,42 @@ class MockIntentParser:
             r"(?:i\s+)?(?:want\s+to\s+)?register(?:\s+(?:me\s+)?(?:on\s+)?(?:a\s+)?subnet)?",
             r"join\s+(?:a\s+)?(?:subnet|sn)",
         ],
+        # SUBNET_INFO must be before SUBNETS and PRICE
+        # (catches "sn 100 price" as subnet info, not TAO price)
+        IntentType.SUBNET_INFO: [
+            # "what's sn 100", "whats subnet 64", "what is sn 1"
+            r"what(?:'?s| is)\s+(?:subnet\s*|sn\s*)(\d+)",
+            # "sn 100 price", "subnet 64 price", "price of sn 100"
+            r"(?:subnet\s*|sn\s*)(\d+)\s+(?:price|cost|value|token)",
+            r"(?:the\s+)?price\s+(?:of\s+)?(?:subnet\s*|sn\s*)(\d+)",
+            # "whats the price of sn 100"
+            r"what(?:'?s| is)\s+(?:the\s+)?price\s+(?:of\s+)?(?:subnet\s*|sn\s*)(\d+)",
+            # "tell me about subnet 1", "info on sn 64"
+            r"(?:tell me |info |details? )?(?:about|on|for)\s+(?:subnet\s*|sn\s*)(\d+)",
+            # "subnet 100 info", "sn 64 details"
+            r"(?:subnet\s*|sn\s*)(\d+)\s+(?:info|details?|data|stats)",
+            # "show subnet 1" (specific ID = info, not list)
+            r"(?:show|check|get|look up)\s+(?:subnet\s*|sn\s*)(\d+)",
+            # Bare "sn 100" or "subnet 64" (just a number after sn/subnet)
+            r"^(?:subnet\s*|sn\s*)(\d+)$",
+        ],
         IntentType.SUBNETS: [
             r"(?:show |list )(?:\w+\s+)*subnets?",
             r"^subnets?$",
             r"what subnets",
+        ],
+        IntentType.PRICE: [
+            r"(?:what(?:'s| is) (?:the )?)?(?:tao |bittensor )?price",
+            r"(?:how much (?:is|does) )?tao (?:cost|worth|price)",
+            r"(?:tao|bittensor) (?:price|value|cost)",
+            r"price (?:of )?(?:tao|bittensor)",
+            r"^price$",
         ],
         IntentType.HISTORY: [
             r"(?:view |show |list |get )?(?:my )?(?:transaction |tx )?history",
             r"(?:recent |past |my )?transactions?",
             r"what (?:have i|did i) (?:done|sent|transferred|staked)",
             r"(?:show |list )?(?:my )?(?:recent )?(?:activity|actions)",
-        ],
-        IntentType.SET_CONFIG: [
-            r"(?:my |the )?hotkey\s+(?:is|should be|=)\s*(\w+)",
-            r"(?:set|use|change)\s+(?:my\s+)?hotkey\s+(?:to\s+)?(\w+)",
-            r"(?:my |the )?wallet\s+(?:is|should be|=)\s*(\w+)",
-            r"(?:set|use|change)\s+(?:my\s+)?wallet\s+(?:to\s+)?(\w+)",
-            r"(?:i(?:'m| am)\s+)?using\s+(?:hotkey|wallet)\s+(\w+)",
         ],
         IntentType.HELP: [
             r"help",
@@ -245,6 +277,13 @@ class MockIntentParser:
                                 intent.amount = float(groups[0])
                         # destination already extracted from SS58_PATTERN above
 
+                    elif intent_type == IntentType.SUBNET_INFO:
+                        if groups and groups[0]:
+                            intent.netuid = int(groups[0])
+                        # Flag price-only queries
+                        if any(w in text for w in ("price", "cost", "value", "token")):
+                            intent.extra["price_only"] = True
+
                     elif (
                         intent_type in (IntentType.METAGRAPH, IntentType.VALIDATORS)
                         or intent_type == IntentType.REGISTER
@@ -255,13 +294,14 @@ class MockIntentParser:
                     elif intent_type == IntentType.SET_CONFIG and groups:
                         # Extract the value being set
                         value = groups[0] if groups[0] else None
-                        # Determine if it's hotkey or wallet from the pattern
-                        if "hotkey" in text:
-                            intent.hotkey_name = value
-                            intent.extra["config_key"] = "hotkey"
-                        elif "wallet" in text:
+                        # Determine if it's hotkey or wallet from the matched text
+                        # Check for wallet/coldkey FIRST (more specific)
+                        if "wallet" in text or "coldkey" in text:
                             intent.wallet_name = value
                             intent.extra["config_key"] = "wallet"
+                        elif "hotkey" in text:
+                            intent.hotkey_name = value
+                            intent.extra["config_key"] = "hotkey"
                         intent.extra["config_value"] = value
 
                     return intent

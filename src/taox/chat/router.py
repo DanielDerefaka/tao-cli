@@ -5,7 +5,6 @@ This is the deterministic executor - it takes structured intents
 and executes them safely using allowlisted command templates.
 """
 
-import asyncio
 import logging
 from dataclasses import dataclass
 from typing import Any, Optional
@@ -15,7 +14,7 @@ from taox.commands.executor import BtcliExecutor
 from taox.config.settings import get_settings
 from taox.data.sdk import BittensorSDK
 from taox.data.taostats import TaostatsClient
-from taox.ui.console import console, format_tao
+from taox.ui.console import format_tao
 
 logger = logging.getLogger(__name__)
 
@@ -124,8 +123,17 @@ class Router:
 
     async def _execute(self, response: LLMResponse) -> ExecutionResult:
         """Execute an intent and return result."""
+        from taox.chat.state_machine import UserPreferences
+
         intent = response.intent
         slots = response.slots
+
+        # Resolve wallet/hotkey from user preferences if not in slots
+        prefs = UserPreferences.load()
+        if not slots.wallet_name:
+            slots.wallet_name = prefs.default_wallet or self.settings.bittensor.default_wallet
+        if not slots.hotkey_name:
+            slots.hotkey_name = prefs.default_hotkey or self.settings.bittensor.default_hotkey
 
         try:
             if intent == IntentType.BALANCE:
@@ -142,6 +150,9 @@ class Router:
 
             elif intent == IntentType.SUBNETS:
                 return await self._exec_subnets()
+
+            elif intent == IntentType.SUBNET_INFO:
+                return await self._exec_subnet_info(slots)
 
             elif intent == IntentType.STAKE:
                 return await self._exec_stake(slots)
@@ -167,10 +178,7 @@ class Router:
             elif intent == IntentType.HELP:
                 return ExecutionResult(success=True, message=self._get_help())
 
-            elif intent == IntentType.GREETING:
-                return ExecutionResult(success=True, message=response.reply)
-
-            elif intent == IntentType.CONVERSATION:
+            elif intent == IntentType.GREETING or intent == IntentType.CONVERSATION:
                 return ExecutionResult(success=True, message=response.reply)
 
             else:
@@ -180,11 +188,26 @@ class Router:
                 )
 
         except Exception as e:
-            logger.exception(f"Execution failed: {e}")
+            logger.debug(f"Execution failed: {e}", exc_info=True)
+
+            # Give user-friendly error messages
+            err = str(e)
+            if "does not exist" in err and "coldkey" in err.lower():
+                wallet = slots.wallet_name or "default"
+                msg = f"Wallet '{wallet}' not found. Check with 'taox wallets' or set your wallet: 'my wallet is <name>'"
+            elif "does not exist" in err and "hotkey" in err.lower():
+                msg = "Hotkey not found. Set it with: 'my hotkey is <name>'"
+            elif "Insufficient" in err or "NotEnoughBalance" in err:
+                msg = "Insufficient balance for this operation."
+            elif "rate" in err.lower() and "limit" in err.lower():
+                msg = "Rate limited. Wait a moment and try again."
+            else:
+                msg = f"Something went wrong: {err.split(chr(10))[0][:100]}"
+
             return ExecutionResult(
                 success=False,
-                message="Something went wrong.",
-                error=str(e),
+                message=msg,
+                error=err,
             )
 
     async def _exec_balance(self, slots: Slots) -> ExecutionResult:
@@ -241,6 +264,21 @@ class Router:
         await list_subnets(self.taostats)
 
         return ExecutionResult(success=True, message="Subnets displayed above.")
+
+    async def _exec_subnet_info(self, slots: Slots) -> ExecutionResult:
+        """Show individual subnet info with token price."""
+        from taox.commands.subnet import get_subnet_info_text
+
+        if not slots.netuid:
+            return ExecutionResult(
+                success=False,
+                message="Which subnet? (e.g. 'sn 1' or 'subnet 64')",
+            )
+
+        text = await get_subnet_info_text(
+            self.taostats, slots.netuid, brief=slots.price_only
+        )
+        return ExecutionResult(success=True, message=text)
 
     async def _exec_stake(self, slots: Slots) -> ExecutionResult:
         """Execute stake operation."""
