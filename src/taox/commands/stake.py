@@ -331,18 +331,27 @@ async def show_portfolio(
 
     # Resolve coldkey
     if not coldkey:
-        if wallet_name:
-            wallet = sdk.get_wallet(name=wallet_name)
-        else:
-            wallet = sdk.get_wallet()
+        if not wallet_name:
             wallet_name = settings.bittensor.default_wallet
 
+        # Try SDK first, then filesystem fallback
+        wallet = sdk.get_wallet(name=wallet_name)
         if wallet:
             coldkey = wallet.coldkey.ss58_address
         else:
-            # Demo mode fallback
-            coldkey = "5DemoAddress..."
-            wallet_name = "demo"
+            # Read address directly from coldkeypub.txt (works without SDK)
+            coldkey = sdk.get_coldkey_address(name=wallet_name)
+
+        if not coldkey:
+            if settings.demo_mode:
+                coldkey = "5DemoAddress..."
+                wallet_name = "demo"
+            else:
+                console.print(
+                    f"[error]Could not resolve wallet '{wallet_name}'. "
+                    f"Run 'taox welcome' to set up your wallet.[/error]"
+                )
+                return
 
     # Fetch data in parallel
     with console.status("[bold green]Fetching portfolio data..."):

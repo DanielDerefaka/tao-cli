@@ -54,6 +54,10 @@ class CredentialManager:
     CHUTES_API_KEY = "chutes_api_key"
     TAOSTATS_API_KEY = "taostats_api_key"
 
+    # Track whether keyring is known-broken so we only warn once
+    _keyring_broken = False
+    _keyring_warned = False
+
     @classmethod
     def _check_keyring(cls) -> None:
         """Check if keyring is available."""
@@ -112,14 +116,16 @@ class CredentialManager:
         Returns:
             True if successful, False otherwise
         """
-        if not KEYRING_AVAILABLE:
+        if not KEYRING_AVAILABLE or cls._keyring_broken:
             return cls._fallback_store(key_name, value)
         try:
             keyring.set_password(cls.SERVICE_NAME, key_name, value)
-            logger.info(f"Stored credential: {key_name}")
             return True
-        except BaseException as e:
-            logger.warning(f"Keyring failed for {key_name}, using fallback: {e}")
+        except BaseException:
+            cls._keyring_broken = True
+            if not cls._keyring_warned:
+                cls._keyring_warned = True
+                logger.debug("System keyring unavailable, using file storage")
             return cls._fallback_store(key_name, value)
 
     @classmethod
@@ -132,14 +138,17 @@ class CredentialManager:
         Returns:
             The credential value or None if not found
         """
-        if not KEYRING_AVAILABLE:
+        if not KEYRING_AVAILABLE or cls._keyring_broken:
             return cls._fallback_get(key_name)
         try:
             value = keyring.get_password(cls.SERVICE_NAME, key_name)
             if value is not None:
                 return value
-        except BaseException as e:
-            logger.warning(f"Keyring failed for {key_name}, trying fallback: {e}")
+        except BaseException:
+            cls._keyring_broken = True
+            if not cls._keyring_warned:
+                cls._keyring_warned = True
+                logger.debug("System keyring unavailable, using file storage")
         return cls._fallback_get(key_name)
 
     @classmethod
@@ -152,14 +161,13 @@ class CredentialManager:
         Returns:
             True if successful, False otherwise
         """
-        if not KEYRING_AVAILABLE:
+        if not KEYRING_AVAILABLE or cls._keyring_broken:
             return False
         try:
             keyring.delete_password(cls.SERVICE_NAME, key_name)
-            logger.info(f"Deleted credential: {key_name}")
             return True
-        except BaseException as e:
-            logger.warning(f"Failed to delete credential {key_name}: {e}")
+        except BaseException:
+            cls._keyring_broken = True
             return False
 
     @classmethod

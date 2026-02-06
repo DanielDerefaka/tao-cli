@@ -22,7 +22,6 @@ try:
     BITTENSOR_AVAILABLE = True
 except ImportError:
     BITTENSOR_AVAILABLE = False
-    logger.warning("Bittensor SDK not installed. Some features will be unavailable.")
 
 
 @dataclass
@@ -187,6 +186,32 @@ class BittensorSDK:
         except Exception as e:
             logger.error(f"Failed to get wallet {name}: {e}")
             return None
+
+    def get_coldkey_address(self, name: Optional[str] = None) -> Optional[str]:
+        """Get the SS58 coldkey address by reading coldkeypub.txt directly.
+
+        Works without the Bittensor SDK installed.
+        """
+        import json
+
+        name = name or self.settings.bittensor.default_wallet
+        wallet_path = Path(self.settings.bittensor.wallet_path).expanduser()
+        coldkeypub = wallet_path / name / "coldkeypub.txt"
+
+        if not coldkeypub.exists():
+            return None
+
+        try:
+            content = coldkeypub.read_text().strip()
+            # May be JSON like {"ss58Address": "5xxx..."} or plain SS58
+            if content.startswith("{"):
+                data = json.loads(content)
+                return data.get("ss58Address") or data.get("ss58_address")
+            if content.startswith("5") and len(content) >= 46:
+                return content
+        except Exception:
+            pass
+        return None
 
     def get_balance(self, address: str) -> BalanceInfo:
         """Get balance for an SS58 address.
