@@ -89,8 +89,7 @@ async def show_subnet_info(
             f"(${pool.alpha_price_in_usd:.2f})"
         )
         console.print(
-            f"[bold]Pool:[/bold] {pool.tao_in_pool:,.0f} τ / "
-            f"{pool.alpha_in_pool:,.0f} α"
+            f"[bold]Pool:[/bold] {pool.tao_in_pool:,.0f} τ / " f"{pool.alpha_in_pool:,.0f} α"
         )
 
     console.print(f"[bold]Emission:[/bold] {subnet.emission * 100:.2f}%")
@@ -143,9 +142,7 @@ async def get_subnet_info_text(
             f"Token price: [tao]{pool.alpha_price_in_tao:.4f} τ[/tao] "
             f"(${pool.alpha_price_in_usd:.2f})"
         )
-        parts.append(
-            f"Pool: {pool.tao_in_pool:,.0f} τ / {pool.alpha_in_pool:,.0f} α"
-        )
+        parts.append(f"Pool: {pool.tao_in_pool:,.0f} τ / {pool.alpha_in_pool:,.0f} α")
 
     emission_pct = f"{subnet.emission * 100:.2f}%" if subnet.emission else "0%"
     parts.append(f"Emission: {emission_pct}")

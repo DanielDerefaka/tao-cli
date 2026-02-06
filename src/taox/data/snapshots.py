@@ -138,10 +138,7 @@ class SnapshotStore:
 
         # Keep only last 90 days of snapshots
         cutoff = datetime.now() - timedelta(days=90)
-        filtered = [
-            s for s in snapshots
-            if datetime.fromisoformat(s.timestamp) > cutoff
-        ]
+        filtered = [s for s in snapshots if datetime.fromisoformat(s.timestamp) > cutoff]
 
         data = {
             "coldkey": coldkey,
@@ -163,10 +160,7 @@ class SnapshotStore:
         today = datetime.now().date()
 
         # Remove any snapshot from today
-        snapshots = [
-            s for s in snapshots
-            if datetime.fromisoformat(s.timestamp).date() != today
-        ]
+        snapshots = [s for s in snapshots if datetime.fromisoformat(s.timestamp).date() != today]
 
         # Add new snapshot
         snapshots.append(snapshot)
@@ -233,10 +227,7 @@ class SnapshotStore:
         snapshots = self._load_snapshots(coldkey)
         cutoff = datetime.now() - timedelta(days=days)
 
-        return [
-            s for s in snapshots
-            if datetime.fromisoformat(s.timestamp) > cutoff
-        ]
+        return [s for s in snapshots if datetime.fromisoformat(s.timestamp) > cutoff]
 
     def compute_delta(
         self,
@@ -267,7 +258,8 @@ class SnapshotStore:
         usd_change = current.usd_value - past.usd_value
         price_change_pct = (
             (current.tao_price_usd - past.tao_price_usd) / past.tao_price_usd * 100
-            if past.tao_price_usd > 0 else 0
+            if past.tao_price_usd > 0
+            else 0
         )
 
         # Compute position deltas
@@ -287,18 +279,23 @@ class SnapshotStore:
             stake_change_pct = (stake_change / stake_before * 100) if stake_before > 0 else 0
 
             netuid, hotkey = key
-            validator_name = (curr_pos.validator_name if curr_pos else
-                             past_pos.validator_name if past_pos else None)
+            validator_name = (
+                curr_pos.validator_name
+                if curr_pos
+                else past_pos.validator_name if past_pos else None
+            )
 
-            position_deltas.append(PositionDelta(
-                netuid=netuid,
-                hotkey=hotkey,
-                validator_name=validator_name,
-                stake_before=stake_before,
-                stake_after=stake_after,
-                stake_change=stake_change,
-                stake_change_percent=stake_change_pct,
-            ))
+            position_deltas.append(
+                PositionDelta(
+                    netuid=netuid,
+                    hotkey=hotkey,
+                    validator_name=validator_name,
+                    stake_before=stake_before,
+                    stake_after=stake_after,
+                    stake_change=stake_change,
+                    stake_change_percent=stake_change_pct,
+                )
+            )
 
         # Sort by stake change
         position_deltas.sort(key=lambda p: p.stake_change, reverse=True)
@@ -312,8 +309,7 @@ class SnapshotStore:
         # This is a rough estimate: rewards = staked_change - new_deposits
         # We approximate by looking at positions that existed before
         estimated_rewards = sum(
-            p.stake_change for p in position_deltas
-            if p.stake_before > 0 and p.stake_change > 0
+            p.stake_change for p in position_deltas if p.stake_before > 0 and p.stake_change > 0
         )
 
         return PortfolioDelta(

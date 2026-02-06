@@ -610,9 +610,7 @@ class TaostatsClient:
 
         try:
             client = await self._get_client()
-            response = await client.get(
-                "/dtao/pool/latest/v1", params={"netuid": netuid}
-            )
+            response = await client.get("/dtao/pool/latest/v1", params={"netuid": netuid})
             response.raise_for_status()
             data = response.json()
 

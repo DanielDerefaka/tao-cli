@@ -315,9 +315,13 @@ def print_plan(
     for item in items:
         padded_label = item.label.ljust(max_label_len)
         if item.is_warning:
-            lines.append(f"[warning]{padded_label}:[/warning] [{item.style}]{item.value}[/{item.style}]")
+            lines.append(
+                f"[warning]{padded_label}:[/warning] [{item.style}]{item.value}[/{item.style}]"
+            )
         else:
-            lines.append(f"[muted]{padded_label}:[/muted] [{item.style}]{item.value}[/{item.style}]")
+            lines.append(
+                f"[muted]{padded_label}:[/muted] [{item.style}]{item.value}[/{item.style}]"
+            )
 
     # Add warnings
     if warnings:

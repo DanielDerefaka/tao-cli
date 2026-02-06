@@ -11,13 +11,11 @@ from taox.commands.recommend import (
     RISK_WEIGHTS,
     RiskLevel,
     ScoringWeights,
-    ValidatorScore,
     calculate_diversification,
     get_stake_recommendations,
     score_validator,
 )
 from taox.data.taostats import Validator
-
 
 runner = CliRunner()
 
@@ -134,10 +132,7 @@ class TestScoreValidator:
         for v in sample_validators:
             score = score_validator(v, sample_validators, weights)
             expected_total = (
-                score.stake_score
-                + score.take_score
-                + score.rank_score
-                + score.diversity_score
+                score.stake_score + score.take_score + score.rank_score + score.diversity_score
             )
             assert abs(score.total_score - expected_total) < 0.001
 
@@ -365,8 +360,7 @@ class TestCLICommand:
     def test_recommend_with_options(self):
         """Test recommend command with various options."""
         result = runner.invoke(
-            app,
-            ["recommend", "100", "--netuid", "1", "--risk", "low", "--top", "3"]
+            app, ["recommend", "100", "--netuid", "1", "--risk", "low", "--top", "3"]
         )
         assert result.exit_code == 0
 

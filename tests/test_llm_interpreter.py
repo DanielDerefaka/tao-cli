@@ -80,14 +80,16 @@ class TestLLMInterpreter:
 
     def test_parse_response_valid_json(self, interpreter):
         """Test parsing a valid JSON response."""
-        content = json.dumps({
-            "intent": "balance",
-            "slots": {},
-            "reply": "Checking your balance...",
-            "needs_confirmation": False,
-            "missing_info": None,
-            "ready_to_execute": True,
-        })
+        content = json.dumps(
+            {
+                "intent": "balance",
+                "slots": {},
+                "reply": "Checking your balance...",
+                "needs_confirmation": False,
+                "missing_info": None,
+                "ready_to_execute": True,
+            }
+        )
 
         response = interpreter._parse_response(content, "what is my balance")
         assert response.intent == IntentType.BALANCE
@@ -191,23 +193,26 @@ class TestLLMInterpreter:
         mock_client = MagicMock()
         mock_response = MagicMock()
         mock_response.choices = [MagicMock()]
-        mock_response.choices[0].message.content = json.dumps({
-            "intent": "stake",
-            "slots": {"amount": 50, "validator_name": "Foundry", "netuid": 1},
-            "reply": "Stake 50 τ to Foundry on SN1?",
-            "needs_confirmation": True,
-            "missing_info": None,
-            "ready_to_execute": True,
-        })
+        mock_response.choices[0].message.content = json.dumps(
+            {
+                "intent": "stake",
+                "slots": {"amount": 50, "validator_name": "Foundry", "netuid": 1},
+                "reply": "Stake 50 τ to Foundry on SN1?",
+                "needs_confirmation": True,
+                "missing_info": None,
+                "ready_to_execute": True,
+            }
+        )
         mock_client.chat.completions.create.return_value = mock_response
 
         # Patch both is_available property and the client method
-        with patch.object(
-            type(interpreter), "is_available",
-            new_callable=lambda: property(lambda self: True)
+        with (
+            patch.object(
+                type(interpreter), "is_available", new_callable=lambda: property(lambda self: True)
+            ),
+            patch.object(interpreter, "_get_client", return_value=mock_client),
         ):
-            with patch.object(interpreter, "_get_client", return_value=mock_client):
-                response = interpreter.interpret("stake 50 tao to foundry")
+            response = interpreter.interpret("stake 50 tao to foundry")
 
         assert response.intent == IntentType.STAKE
         assert response.slots.amount == 50
@@ -234,12 +239,22 @@ class TestIntentTypes:
     def test_all_intent_types_exist(self):
         """Verify all expected intent types are defined."""
         expected = [
-            "BALANCE", "PORTFOLIO", "TRANSFER",
-            "STAKE", "UNSTAKE",
-            "VALIDATORS", "SUBNETS", "METAGRAPH", "PRICE",
-            "REGISTER", "HISTORY",
+            "BALANCE",
+            "PORTFOLIO",
+            "TRANSFER",
+            "STAKE",
+            "UNSTAKE",
+            "VALIDATORS",
+            "SUBNETS",
+            "METAGRAPH",
+            "PRICE",
+            "REGISTER",
+            "HISTORY",
             "SET_CONFIG",
-            "HELP", "GREETING", "CONVERSATION", "UNCLEAR",
+            "HELP",
+            "GREETING",
+            "CONVERSATION",
+            "UNCLEAR",
         ]
         for intent_name in expected:
             assert hasattr(IntentType, intent_name), f"Missing intent type: {intent_name}"

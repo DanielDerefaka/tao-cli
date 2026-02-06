@@ -196,9 +196,7 @@ async def _llm_chat_loop(initial_message: Optional[str] = None):
     print_welcome()
 
     if settings.demo_mode:
-        console.print(
-            "[warning]Demo mode - no real transactions[/warning]\n"
-        )
+        console.print("[warning]Demo mode - no real transactions[/warning]\n")
 
     if not router.interpreter.is_available:
         console.print("[warning]No Chutes API key - using pattern matching[/warning]")
@@ -804,8 +802,12 @@ def wallets():
 @app.command()
 def portfolio(
     wallet_name: Optional[str] = typer.Option(None, "--wallet", "-w", help="Wallet name"),
-    delta: Optional[str] = typer.Option(None, "--delta", "-d", help="Show change over time (e.g., 7d, 30d)"),
-    history: Optional[str] = typer.Option(None, "--history", "-h", help="Show history (e.g., 7d, 30d)"),
+    delta: Optional[str] = typer.Option(
+        None, "--delta", "-d", help="Show change over time (e.g., 7d, 30d)"
+    ),
+    history: Optional[str] = typer.Option(
+        None, "--history", "-h", help="Show history (e.g., 7d, 30d)"
+    ),
     share: bool = typer.Option(False, "--share", "-s", help="Redact addresses for sharing"),
     json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
 ):
@@ -834,8 +836,11 @@ def portfolio(
     async def _portfolio_with_snapshots():
         # Get current portfolio
         result = await stake_cmds.show_portfolio(
-            taostats, sdk, wallet_name=wallet_name,
-            share_mode=share, json_output=json_output,
+            taostats,
+            sdk,
+            wallet_name=wallet_name,
+            share_mode=share,
+            json_output=json_output,
             suppress_output=(delta is not None or history is not None),
         )
 
@@ -875,9 +880,13 @@ def portfolio(
             if days:
                 delta_result = store.compute_delta(snapshot.coldkey, days, snapshot)
                 if delta_result:
-                    _display_portfolio_delta(delta_result, share_mode=share, json_output=json_output)
+                    _display_portfolio_delta(
+                        delta_result, share_mode=share, json_output=json_output
+                    )
                 else:
-                    console.print(f"[muted]No historical data available for {days}d comparison.[/muted]")
+                    console.print(
+                        f"[muted]No historical data available for {days}d comparison.[/muted]"
+                    )
                     console.print("[muted]Run 'taox portfolio' daily to build history.[/muted]")
 
         # Handle history view
@@ -886,11 +895,16 @@ def portfolio(
             if days:
                 history_data = store.get_history(snapshot.coldkey, days)
                 if history_data:
-                    _display_portfolio_history(history_data, days, share_mode=share, json_output=json_output)
+                    _display_portfolio_history(
+                        history_data, days, share_mode=share, json_output=json_output
+                    )
                 else:
-                    console.print(f"[muted]No historical data available for the last {days} days.[/muted]")
+                    console.print(
+                        f"[muted]No historical data available for the last {days} days.[/muted]"
+                    )
 
     from datetime import datetime
+
     asyncio.run(_portfolio_with_snapshots())
 
 
@@ -906,7 +920,9 @@ def _parse_days(time_str: str) -> Optional[int]:
     try:
         return int(time_str)
     except ValueError:
-        console.print(f"[error]Invalid time format: {time_str}. Use format like '7d' or '30d'.[/error]")
+        console.print(
+            f"[error]Invalid time format: {time_str}. Use format like '7d' or '30d'.[/error]"
+        )
         return None
 
 
@@ -931,18 +947,26 @@ def _display_portfolio_delta(delta, share_mode: bool = False, json_output: bool 
             "usd_value_change": delta.usd_value_change,
             "tao_price_change_percent": delta.tao_price_change_percent,
             "estimated_rewards": delta.estimated_rewards,
-            "best_performer": {
-                "netuid": delta.best_performer.netuid,
-                "validator": delta.best_performer.validator_name,
-                "change": delta.best_performer.stake_change,
-                "change_percent": delta.best_performer.stake_change_percent,
-            } if delta.best_performer else None,
-            "worst_performer": {
-                "netuid": delta.worst_performer.netuid,
-                "validator": delta.worst_performer.validator_name,
-                "change": delta.worst_performer.stake_change,
-                "change_percent": delta.worst_performer.stake_change_percent,
-            } if delta.worst_performer else None,
+            "best_performer": (
+                {
+                    "netuid": delta.best_performer.netuid,
+                    "validator": delta.best_performer.validator_name,
+                    "change": delta.best_performer.stake_change,
+                    "change_percent": delta.best_performer.stake_change_percent,
+                }
+                if delta.best_performer
+                else None
+            ),
+            "worst_performer": (
+                {
+                    "netuid": delta.worst_performer.netuid,
+                    "validator": delta.worst_performer.validator_name,
+                    "change": delta.worst_performer.stake_change,
+                    "change_percent": delta.worst_performer.stake_change_percent,
+                }
+                if delta.worst_performer
+                else None
+            ),
         }
         print(json_module.dumps(output, indent=2))
         return
@@ -968,30 +992,27 @@ def _display_portfolio_delta(delta, share_mode: bool = False, json_output: bool 
 
     table.add_row(
         "Total Value",
-        f"[{change_color}]{change_symbol}{delta.total_value_change:,.4f} τ ({change_symbol}{delta.total_value_change_percent:.1f}%)[/{change_color}]"
+        f"[{change_color}]{change_symbol}{delta.total_value_change:,.4f} τ ({change_symbol}{delta.total_value_change_percent:.1f}%)[/{change_color}]",
     )
     table.add_row(
         "Free Balance",
-        f"{'+' if delta.free_balance_change >= 0 else ''}{delta.free_balance_change:,.4f} τ"
+        f"{'+' if delta.free_balance_change >= 0 else ''}{delta.free_balance_change:,.4f} τ",
     )
     table.add_row(
         "Total Staked",
-        f"{'+' if delta.total_staked_change >= 0 else ''}{delta.total_staked_change:,.4f} τ"
+        f"{'+' if delta.total_staked_change >= 0 else ''}{delta.total_staked_change:,.4f} τ",
     )
     table.add_row(
         "USD Value",
-        f"[{change_color}]{change_symbol}${delta.usd_value_change:,.2f}[/{change_color}]"
+        f"[{change_color}]{change_symbol}${delta.usd_value_change:,.2f}[/{change_color}]",
     )
     table.add_row(
         "TAO Price",
-        f"{'+' if delta.tao_price_change_percent >= 0 else ''}{delta.tao_price_change_percent:.1f}%"
+        f"{'+' if delta.tao_price_change_percent >= 0 else ''}{delta.tao_price_change_percent:.1f}%",
     )
 
     if delta.estimated_rewards > 0:
-        table.add_row(
-            "Est. Rewards",
-            f"[success]+{delta.estimated_rewards:,.4f} τ[/success]"
-        )
+        table.add_row("Est. Rewards", f"[success]+{delta.estimated_rewards:,.4f} τ[/success]")
 
     console.print(table)
     console.print()
@@ -999,18 +1020,28 @@ def _display_portfolio_delta(delta, share_mode: bool = False, json_output: bool 
     # Best/worst performers
     if delta.best_performer:
         bp = delta.best_performer
-        name = bp.validator_name or (redact_address(bp.hotkey) if share_mode else bp.hotkey[:12] + "...")
-        console.print(f"[success]Best performer:[/success] SN{bp.netuid} ({name}): +{bp.stake_change:,.4f} τ ({bp.stake_change_percent:+.1f}%)")
+        name = bp.validator_name or (
+            redact_address(bp.hotkey) if share_mode else bp.hotkey[:12] + "..."
+        )
+        console.print(
+            f"[success]Best performer:[/success] SN{bp.netuid} ({name}): +{bp.stake_change:,.4f} τ ({bp.stake_change_percent:+.1f}%)"
+        )
 
     if delta.worst_performer and delta.worst_performer.stake_change < 0:
         wp = delta.worst_performer
-        name = wp.validator_name or (redact_address(wp.hotkey) if share_mode else wp.hotkey[:12] + "...")
-        console.print(f"[error]Worst performer:[/error] SN{wp.netuid} ({name}): {wp.stake_change:,.4f} τ ({wp.stake_change_percent:+.1f}%)")
+        name = wp.validator_name or (
+            redact_address(wp.hotkey) if share_mode else wp.hotkey[:12] + "..."
+        )
+        console.print(
+            f"[error]Worst performer:[/error] SN{wp.netuid} ({name}): {wp.stake_change:,.4f} τ ({wp.stake_change_percent:+.1f}%)"
+        )
 
     console.print()
 
 
-def _display_portfolio_history(history: list, days: int, share_mode: bool = False, json_output: bool = False):
+def _display_portfolio_history(
+    history: list, days: int, share_mode: bool = False, json_output: bool = False
+):
     """Display portfolio history."""
     import json as json_module
 
@@ -1123,7 +1154,9 @@ def recommend(
     amount: float = typer.Argument(..., help="Amount of TAO to stake"),
     netuid: int = typer.Option(1, "--netuid", "-n", help="Subnet ID"),
     top: int = typer.Option(5, "--top", "-t", help="Number of top validators to show"),
-    diversify: int = typer.Option(1, "--diversify", "-d", help="Number of validators to split across (0=auto)"),
+    diversify: int = typer.Option(
+        1, "--diversify", "-d", help="Number of validators to split across (0=auto)"
+    ),
     risk: str = typer.Option("med", "--risk", "-r", help="Risk level: low, med, high"),
     share: bool = typer.Option(False, "--share", "-s", help="Redact addresses for sharing"),
     json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
@@ -1231,9 +1264,13 @@ def watch_cmd(
     registration: Optional[float] = typer.Option(
         None, "--registration", "-r", help="Alert when registration burn cost <= value"
     ),
-    netuid: int = typer.Option(1, "--netuid", "-n", help="Subnet ID for validator/registration alerts"),
+    netuid: int = typer.Option(
+        1, "--netuid", "-n", help="Subnet ID for validator/registration alerts"
+    ),
     interval: int = typer.Option(30, "--interval", "-i", help="Polling interval in seconds"),
-    duration: Optional[int] = typer.Option(None, "--duration", "-d", help="Run for N seconds (default: indefinitely)"),
+    duration: Optional[int] = typer.Option(
+        None, "--duration", "-d", help="Run for N seconds (default: indefinitely)"
+    ),
     list_alerts: bool = typer.Option(False, "--list", "-l", help="List all configured alerts"),
     clear: bool = typer.Option(False, "--clear", help="Clear all alert rules"),
     json_output: bool = typer.Option(False, "--json", help="Output as JSON"),

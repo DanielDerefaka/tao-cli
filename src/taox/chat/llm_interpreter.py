@@ -158,10 +158,12 @@ class LLMInterpreter:
 
             if self._pending_intent:
                 # Add context about what we're waiting for
-                messages.append({
-                    "role": "assistant",
-                    "content": json.dumps(self._pending_intent.model_dump()),
-                })
+                messages.append(
+                    {
+                        "role": "assistant",
+                        "content": json.dumps(self._pending_intent.model_dump()),
+                    }
+                )
 
             messages.append({"role": "user", "content": user_input})
 
@@ -238,6 +240,7 @@ class LLMInterpreter:
                 slots = data["slots"]
                 # Convert string numbers to float/int
                 import contextlib
+
                 if slots.get("amount") is not None:
                     with contextlib.suppress(ValueError, TypeError):
                         slots["amount"] = float(slots["amount"])
@@ -324,10 +327,19 @@ class LLMInterpreter:
             IntentType.STAKE: f"Staking {slots.amount or '?'} τ...",
             IntentType.VALIDATORS: "Fetching validators...",
             IntentType.SUBNETS: "Loading subnets...",
-            IntentType.SUBNET_INFO: f"Fetching subnet {slots.netuid} info..." if slots.netuid else "Which subnet? (e.g. 'sn 1' or 'subnet 64')",
+            IntentType.SUBNET_INFO: (
+                f"Fetching subnet {slots.netuid} info..."
+                if slots.netuid
+                else "Which subnet? (e.g. 'sn 1' or 'subnet 64')"
+            ),
             IntentType.METAGRAPH: "Loading metagraph...",
             IntentType.HISTORY: "Loading transaction history...",
-            IntentType.REGISTER: "Register on subnet " + (str(slots.netuid) if slots.netuid else "— which subnet? (e.g. 'register on subnet 1')"),
+            IntentType.REGISTER: "Register on subnet "
+            + (
+                str(slots.netuid)
+                if slots.netuid
+                else "— which subnet? (e.g. 'register on subnet 1')"
+            ),
             IntentType.TRANSFER: "Transfer — specify amount and destination address.",
             IntentType.SET_CONFIG: set_config_reply,
             IntentType.GREETING: "Hey! What can I help you with?",
@@ -369,7 +381,8 @@ class LLMInterpreter:
             intent=intent,
             slots=slots,
             reply=reply,
-            needs_confirmation=intent in (IntentType.STAKE, IntentType.UNSTAKE, IntentType.TRANSFER, IntentType.REGISTER),
+            needs_confirmation=intent
+            in (IntentType.STAKE, IntentType.UNSTAKE, IntentType.TRANSFER, IntentType.REGISTER),
             ready_to_execute=ready,
         )
 

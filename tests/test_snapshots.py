@@ -1,6 +1,5 @@
 """Tests for portfolio snapshots."""
 
-import json
 import tempfile
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -8,9 +7,7 @@ from pathlib import Path
 import pytest
 
 from taox.data.snapshots import (
-    PortfolioDelta,
     PortfolioSnapshot,
-    PositionDelta,
     PositionSnapshot,
     SnapshotStore,
     get_snapshot_store,

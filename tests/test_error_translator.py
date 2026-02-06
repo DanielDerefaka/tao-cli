@@ -8,8 +8,6 @@ Tests cover:
 - Unknown error handling
 """
 
-import pytest
-
 from taox.errors import (
     ErrorCategory,
     TranslatedError,

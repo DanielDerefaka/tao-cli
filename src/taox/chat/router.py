@@ -275,9 +275,7 @@ class Router:
                 message="Which subnet? (e.g. 'sn 1' or 'subnet 64')",
             )
 
-        text = await get_subnet_info_text(
-            self.taostats, slots.netuid, brief=slots.price_only
-        )
+        text = await get_subnet_info_text(self.taostats, slots.netuid, brief=slots.price_only)
         return ExecutionResult(success=True, message=text)
 
     async def _exec_stake(self, slots: Slots) -> ExecutionResult:

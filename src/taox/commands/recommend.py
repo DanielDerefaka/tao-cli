@@ -52,12 +52,7 @@ class ScoringWeights:
 
     def validate(self) -> bool:
         """Validate weights sum to 1.0."""
-        total = (
-            self.stake_weight
-            + self.take_weight
-            + self.rank_weight
-            + self.diversity_weight
-        )
+        total = self.stake_weight + self.take_weight + self.rank_weight + self.diversity_weight
         return abs(total - 1.0) < 0.01
 
 
@@ -320,9 +315,7 @@ async def get_stake_recommendations(
     top_scored = scored[:top_n]
 
     # Calculate diversification
-    recommendations, diversify_reason = calculate_diversification(
-        amount, top_scored, diversify
-    )
+    recommendations, diversify_reason = calculate_diversification(amount, top_scored, diversify)
 
     # Generate warnings
     warnings = []
@@ -368,7 +361,9 @@ def display_recommendations(
             "recommendations": [
                 {
                     "validator_name": r.validator.name,
-                    "validator_hotkey": r.validator.hotkey if not share_mode else redact_address(r.validator.hotkey),
+                    "validator_hotkey": (
+                        r.validator.hotkey if not share_mode else redact_address(r.validator.hotkey)
+                    ),
                     "allocation_percent": r.allocation_percent,
                     "allocation_amount": r.allocation_amount,
                     "score": r.score.total_score,
@@ -393,8 +388,7 @@ def display_recommendations(
     title = f"Staking Recommendation - {format_tao(result.total_amount)} on SN{result.netuid}"
     console.print(
         Panel(
-            f"[bold]{title}[/bold]\n"
-            f"Risk level: {result.risk_level.value}",
+            f"[bold]{title}[/bold]\n" f"Risk level: {result.risk_level.value}",
             box=box.ROUNDED,
             border_style="primary",
         )
@@ -457,10 +451,12 @@ def display_recommendations(
     # Why section - explain the scoring
     console.print("[bold]Why these validators?[/bold]")
     weights = result.weights_used
-    console.print(f"  Scoring weights: Stake {weights.stake_weight:.0%}, "
-                  f"Take {weights.take_weight:.0%}, "
-                  f"Rank {weights.rank_weight:.0%}, "
-                  f"Diversity {weights.diversity_weight:.0%}")
+    console.print(
+        f"  Scoring weights: Stake {weights.stake_weight:.0%}, "
+        f"Take {weights.take_weight:.0%}, "
+        f"Rank {weights.rank_weight:.0%}, "
+        f"Diversity {weights.diversity_weight:.0%}"
+    )
     console.print(f"  Risk profile: {result.risk_level.value} - ", end="")
     if result.risk_level == RiskLevel.LOW:
         console.print("prioritizes established validators with proven track record")
@@ -484,7 +480,7 @@ def display_recommendations(
         name = v.name or format_address(v.hotkey, truncate=True)
         console.print(
             f"  {Symbols.NEXT} [command]taox stake --amount {rec.allocation_amount:.2f} "
-            f"--validator \"{name}\" --netuid {result.netuid}[/command]"
+            f'--validator "{name}" --netuid {result.netuid}[/command]'
         )
 
 

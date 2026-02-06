@@ -7,19 +7,20 @@ Tests cover:
 - JSON output
 """
 
+from unittest.mock import MagicMock, patch
+
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
 
 from taox.commands.tx_pipeline import (
+    PlanItem,
     TransactionPipeline,
+    TxPhase,
     TxPlan,
     TxResult,
-    TxPhase,
     VerificationLevel,
-    PlanItem,
+    build_register_plan,
     build_stake_plan,
     build_transfer_plan,
-    build_register_plan,
 )
 
 
@@ -67,7 +68,9 @@ class TestTxPlan:
 
         assert plan.title == "Transfer Plan"
         assert plan.command_name == "Transfer"
-        assert "irreversible" in plan.warnings[0].lower() or "irreversible" in plan.warnings[1].lower()
+        assert (
+            "irreversible" in plan.warnings[0].lower() or "irreversible" in plan.warnings[1].lower()
+        )
 
     def test_register_plan_basic(self):
         """Test building a register plan."""

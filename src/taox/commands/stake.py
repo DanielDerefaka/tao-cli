@@ -407,8 +407,11 @@ async def show_portfolio(
             "positions": [
                 {
                     "netuid": p.get("netuid"),
-                    "validator": p.get("hotkey_name") or validator_names.get(p.get("hotkey", ""), "Unknown"),
-                    "hotkey": redact_address(p.get("hotkey", "")) if share_mode else p.get("hotkey"),
+                    "validator": p.get("hotkey_name")
+                    or validator_names.get(p.get("hotkey", ""), "Unknown"),
+                    "hotkey": (
+                        redact_address(p.get("hotkey", "")) if share_mode else p.get("hotkey")
+                    ),
                     "stake": p.get("stake", 0),
                     "alpha_balance": p.get("alpha_balance", 0),
                 }
@@ -424,7 +427,9 @@ async def show_portfolio(
 
     # Display values (potentially redacted)
     display_wallet = redact_wallet_name(wallet_name) if share_mode else wallet_name
-    display_address = redact_address(coldkey) if share_mode else format_address(coldkey, truncate=False)
+    display_address = (
+        redact_address(coldkey) if share_mode else format_address(coldkey, truncate=False)
+    )
 
     # Header panel
     header = f"""[bold]Wallet:[/bold] {display_wallet or 'N/A'}

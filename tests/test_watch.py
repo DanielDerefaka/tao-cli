@@ -1,10 +1,9 @@
 """Tests for watch and alerts."""
 
-import json
 import tempfile
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from typer.testing import CliRunner
@@ -18,10 +17,8 @@ from taox.commands.watch import (
     create_price_alert,
     create_registration_alert,
     create_validator_alert,
-    list_alerts,
 )
-from taox.data.taostats import PriceInfo, Subnet, Validator
-
+from taox.data.taostats import PriceInfo, Subnet
 
 runner = CliRunner()
 
@@ -124,8 +121,12 @@ class TestAlertStore:
 
     def test_get_enabled_only(self, alert_store):
         """Test filtering to enabled rules only."""
-        rule1 = AlertRule(id="e1", type=AlertType.PRICE_ABOVE, name="Enabled", threshold=500, enabled=True)
-        rule2 = AlertRule(id="d1", type=AlertType.PRICE_BELOW, name="Disabled", threshold=400, enabled=False)
+        rule1 = AlertRule(
+            id="e1", type=AlertType.PRICE_ABOVE, name="Enabled", threshold=500, enabled=True
+        )
+        rule2 = AlertRule(
+            id="d1", type=AlertType.PRICE_BELOW, name="Disabled", threshold=400, enabled=False
+        )
 
         alert_store.add_rule(rule1)
         alert_store.add_rule(rule2)
@@ -203,10 +204,18 @@ class TestWatchRunner:
         mock = AsyncMock()
         mock.get_price = AsyncMock(return_value=PriceInfo(usd=450.0, change_24h=2.5))
         mock.get_validators = AsyncMock(return_value=[])
-        mock.get_subnet = AsyncMock(return_value=Subnet(
-            netuid=1, name="Test", emission=0.1, tempo=360,
-            difficulty=1000, burn_cost=1.0, total_stake=1000, validators=64
-        ))
+        mock.get_subnet = AsyncMock(
+            return_value=Subnet(
+                netuid=1,
+                name="Test",
+                emission=0.1,
+                tempo=360,
+                difficulty=1000,
+                burn_cost=1.0,
+                total_stake=1000,
+                validators=64,
+            )
+        )
         return mock
 
     @pytest.fixture

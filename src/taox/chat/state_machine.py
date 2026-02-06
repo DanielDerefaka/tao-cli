@@ -271,6 +271,7 @@ class FilledSlots(BaseModel):
             # Parse netuid from various formats: "1", "sn1", "sn 1", "subnet 1", etc.
             if value:
                 import re
+
                 text = str(value).strip().lower()
                 # Try to extract number from formats like "sn 1", "subnet 1", "sn1"
                 match = re.search(r"(?:subnet\s*|sn\s*)?(\d+)", text)

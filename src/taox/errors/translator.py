@@ -256,7 +256,12 @@ def translate_error(
 
             # Substitute netuid if provided
             if netuid:
-                actions = [a.format(netuid=netuid, blocks=retry_blocks or "N", seconds=(retry_blocks or 0) * 12) for a in actions]
+                actions = [
+                    a.format(
+                        netuid=netuid, blocks=retry_blocks or "N", seconds=(retry_blocks or 0) * 12
+                    )
+                    for a in actions
+                ]
 
             return TranslatedError(
                 category=category,

@@ -2,14 +2,12 @@
 
 import json
 import sys
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
 from typer.testing import CliRunner
 
 from taox.cli import app
-
 
 runner = CliRunner()
 
@@ -157,7 +155,9 @@ class TestDoctorChecks:
     @patch("httpx.Client")
     def test_rpc_unreachable(self, mock_client):
         """Test RPC unreachable handling."""
-        mock_client.return_value.__enter__.return_value.post.side_effect = Exception("Connection failed")
+        mock_client.return_value.__enter__.return_value.post.side_effect = Exception(
+            "Connection failed"
+        )
 
         result = runner.invoke(app, ["doctor", "--json"])
         data = json.loads(result.output)

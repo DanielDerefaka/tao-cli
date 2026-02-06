@@ -115,7 +115,9 @@ def calculate_rebalance_plan(
         # Equal split
         per_validator = total_to_stake / len(target_validators)
         allocations = [(v, per_validator) for v in target_validators]
-        description = f"Equal split: {format_tao(per_validator)} each to {len(target_validators)} validators"
+        description = (
+            f"Equal split: {format_tao(per_validator)} each to {len(target_validators)} validators"
+        )
 
     elif mode == RebalanceMode.TOP_HEAVY:
         # 50% to top, rest split equally
@@ -151,13 +153,15 @@ def calculate_rebalance_plan(
         if amount < 0.001:  # Skip tiny amounts
             continue
 
-        operations.append(BatchOperation(
-            action="stake",
-            amount=amount,
-            validator_hotkey=validator.hotkey,
-            validator_name=validator.name,
-            netuid=netuid,
-        ))
+        operations.append(
+            BatchOperation(
+                action="stake",
+                amount=amount,
+                validator_hotkey=validator.hotkey,
+                validator_name=validator.name,
+                netuid=netuid,
+            )
+        )
 
     # Add warnings
     if total_to_stake >= 100:
@@ -211,6 +215,7 @@ def display_batch_plan(plan: BatchPlan, share_mode: bool = False) -> None:
         name = op.validator_name or format_address(op.validator_hotkey)
         if share_mode:
             from taox.ui.console import redact_address
+
             name = op.validator_name or redact_address(op.validator_hotkey)
 
         # Get take rate if available (would need validator lookup)
@@ -276,7 +281,7 @@ async def execute_batch(
 
     # Process in chunks
     for chunk_start in range(0, len(plan.operations), chunk_size):
-        chunk = plan.operations[chunk_start:chunk_start + chunk_size]
+        chunk = plan.operations[chunk_start : chunk_start + chunk_size]
         chunk_num = (chunk_start // chunk_size) + 1
         total_chunks = (len(plan.operations) + chunk_size - 1) // chunk_size
 
@@ -298,7 +303,9 @@ async def execute_batch(
                     safe_staking=True,
                 )
 
-                console.print(f"  {Symbols.PENDING} Staking {format_tao(op.amount)} to {op.validator_name or op.validator_hotkey[:12]}...")
+                console.print(
+                    f"  {Symbols.PENDING} Staking {format_tao(op.amount)} to {op.validator_name or op.validator_hotkey[:12]}..."
+                )
 
                 exec_result = executor.run_interactive(**cmd_info)
 
@@ -360,7 +367,9 @@ def display_batch_result(result: BatchResult) -> None:
     failed_color = "error" if result.failed > 0 else "muted"
 
     console.print("[bold]Batch Result:[/bold]")
-    console.print(f"  [{success_color}]{Symbols.CHECK} Successful: {result.successful}[/{success_color}]")
+    console.print(
+        f"  [{success_color}]{Symbols.CHECK} Successful: {result.successful}[/{success_color}]"
+    )
     console.print(f"  [{failed_color}]{Symbols.ERROR} Failed: {result.failed}[/{failed_color}]")
     if result.skipped > 0:
         console.print(f"  [muted]{Symbols.WARN} Skipped: {result.skipped}[/muted]")
@@ -507,7 +516,9 @@ async def stake_rebalance(
 
     # Confirm
     if not skip_confirm:
-        console.print(f"[warning]This will execute {len(plan.operations)} stake operations.[/warning]")
+        console.print(
+            f"[warning]This will execute {len(plan.operations)} stake operations.[/warning]"
+        )
         if not confirm("Proceed with batch stake?"):
             console.print("[muted]Batch cancelled.[/muted]")
             return BatchResult(

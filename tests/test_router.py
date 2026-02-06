@@ -121,9 +121,7 @@ class TestRouter:
     async def test_execute_balance(self, router, mock_clients):
         """Test executing balance intent."""
         taostats, sdk, _ = mock_clients
-        sdk.get_wallet.return_value = MagicMock(
-            coldkey=MagicMock(ss58_address="5xxx...")
-        )
+        sdk.get_wallet.return_value = MagicMock(coldkey=MagicMock(ss58_address="5xxx..."))
         # Use AsyncMock for async method
         sdk.get_balance_async = AsyncMock(return_value=MagicMock(free=100.0, staked=50.0))
 
@@ -237,7 +235,9 @@ class TestRouterConfirmationVariants:
             )
 
     @pytest.mark.asyncio
-    @pytest.mark.parametrize("positive", ["yes", "y", "ok", "okay", "confirm", "sure", "go", "do it", "proceed"])
+    @pytest.mark.parametrize(
+        "positive", ["yes", "y", "ok", "okay", "confirm", "sure", "go", "do it", "proceed"]
+    )
     async def test_positive_confirmations(self, router, positive):
         """Test all positive confirmation variants."""
         router._pending_confirmation = LLMResponse(
@@ -248,7 +248,7 @@ class TestRouterConfirmationVariants:
 
         with patch.object(router, "_execute", new_callable=AsyncMock) as mock_exec:
             mock_exec.return_value = ExecutionResult(success=True, message="Done")
-            result = await router._handle_confirmation(positive)
+            await router._handle_confirmation(positive)
             mock_exec.assert_called_once()
 
     @pytest.mark.asyncio
