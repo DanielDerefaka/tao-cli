@@ -1,23 +1,27 @@
-"""Credential management using system keyring."""
+"""Credential management — keyring on macOS, file storage on Linux/WSL."""
 
 import logging
 import os
+import sys
 from pathlib import Path
 from typing import Optional
 
-try:
-    import keyring
-
-    KEYRING_AVAILABLE = True
-except ImportError:
-    KEYRING_AVAILABLE = False
-
-
 logger = logging.getLogger(__name__)
 
-# Fallback file for environments where keyring is broken (e.g. WSL)
+# Fallback file for Linux/WSL (chmod 600)
 _FALLBACK_DIR = Path.home() / ".taox"
 _FALLBACK_FILE = _FALLBACK_DIR / ".credentials"
+
+# Only use keyring on macOS where it actually works reliably.
+# Linux/WSL has broken D-Bus/SecretService — skip it entirely.
+_USE_KEYRING = False
+if sys.platform == "darwin":
+    try:
+        import keyring
+
+        _USE_KEYRING = True
+    except ImportError:
+        pass
 
 
 class SensitiveDataFilter(logging.Filter):
@@ -46,34 +50,21 @@ class SensitiveDataFilter(logging.Filter):
 
 
 class CredentialManager:
-    """Manages secure storage and retrieval of credentials using system keyring."""
+    """Credential storage — keyring on macOS, file on Linux/WSL."""
 
     SERVICE_NAME = "taox"
 
-    # Known credential keys
     CHUTES_API_KEY = "chutes_api_key"
     TAOSTATS_API_KEY = "taostats_api_key"
 
-    # Track whether keyring is known-broken so we only warn once
-    _keyring_broken = False
-    _keyring_warned = False
-
     @classmethod
-    def _check_keyring(cls) -> None:
-        """Check if keyring is available."""
-        if not KEYRING_AVAILABLE:
-            raise RuntimeError("keyring package not installed. Install with: pip install keyring")
-
-    @classmethod
-    def _fallback_get(cls, key_name: str) -> Optional[str]:
-        """Read a credential from the fallback file or environment."""
-        # Check environment variables first (TAOX_CHUTES_API_KEY, etc.)
+    def _file_get(cls, key_name: str) -> Optional[str]:
+        """Read a credential from env var or ~/.taox/.credentials."""
         env_key = f"TAOX_{key_name.upper()}"
         env_val = os.environ.get(env_key)
         if env_val:
             return env_val
 
-        # Check fallback file
         if _FALLBACK_FILE.exists():
             try:
                 for line in _FALLBACK_FILE.read_text().splitlines():
@@ -86,11 +77,10 @@ class CredentialManager:
         return None
 
     @classmethod
-    def _fallback_store(cls, key_name: str, value: str) -> bool:
-        """Write a credential to the fallback file."""
+    def _file_store(cls, key_name: str, value: str) -> bool:
+        """Write a credential to ~/.taox/.credentials (chmod 600)."""
         try:
             _FALLBACK_DIR.mkdir(parents=True, exist_ok=True)
-            # Read existing entries
             entries: dict[str, str] = {}
             if _FALLBACK_FILE.exists():
                 for line in _FALLBACK_FILE.read_text().splitlines():
@@ -101,74 +91,42 @@ class CredentialManager:
             _FALLBACK_FILE.write_text("\n".join(f"{k}={v}" for k, v in entries.items()) + "\n")
             _FALLBACK_FILE.chmod(0o600)
             return True
-        except Exception as e:
-            logger.error(f"Fallback store failed for {key_name}: {e}")
+        except Exception:
             return False
 
     @classmethod
     def store(cls, key_name: str, value: str) -> bool:
-        """Store a credential in the system keyring (with fallback).
-
-        Args:
-            key_name: Name/identifier for the credential
-            value: The credential value to store
-
-        Returns:
-            True if successful, False otherwise
-        """
-        if not KEYRING_AVAILABLE or cls._keyring_broken:
-            return cls._fallback_store(key_name, value)
-        try:
-            keyring.set_password(cls.SERVICE_NAME, key_name, value)
-            return True
-        except BaseException:
-            cls._keyring_broken = True
-            if not cls._keyring_warned:
-                cls._keyring_warned = True
-                logger.debug("System keyring unavailable, using file storage")
-            return cls._fallback_store(key_name, value)
+        """Store a credential securely."""
+        if _USE_KEYRING:
+            try:
+                keyring.set_password(cls.SERVICE_NAME, key_name, value)
+                return True
+            except Exception:
+                pass
+        return cls._file_store(key_name, value)
 
     @classmethod
     def get(cls, key_name: str) -> Optional[str]:
-        """Retrieve a credential from the system keyring (with fallback).
-
-        Args:
-            key_name: Name/identifier for the credential
-
-        Returns:
-            The credential value or None if not found
-        """
-        if not KEYRING_AVAILABLE or cls._keyring_broken:
-            return cls._fallback_get(key_name)
-        try:
-            value = keyring.get_password(cls.SERVICE_NAME, key_name)
-            if value is not None:
-                return value
-        except BaseException:
-            cls._keyring_broken = True
-            if not cls._keyring_warned:
-                cls._keyring_warned = True
-                logger.debug("System keyring unavailable, using file storage")
-        return cls._fallback_get(key_name)
+        """Retrieve a credential."""
+        if _USE_KEYRING:
+            try:
+                value = keyring.get_password(cls.SERVICE_NAME, key_name)
+                if value is not None:
+                    return value
+            except Exception:
+                pass
+        return cls._file_get(key_name)
 
     @classmethod
     def delete(cls, key_name: str) -> bool:
-        """Delete a credential from the system keyring.
-
-        Args:
-            key_name: Name/identifier for the credential
-
-        Returns:
-            True if successful, False otherwise
-        """
-        if not KEYRING_AVAILABLE or cls._keyring_broken:
-            return False
-        try:
-            keyring.delete_password(cls.SERVICE_NAME, key_name)
-            return True
-        except BaseException:
-            cls._keyring_broken = True
-            return False
+        """Delete a credential."""
+        if _USE_KEYRING:
+            try:
+                keyring.delete_password(cls.SERVICE_NAME, key_name)
+                return True
+            except Exception:
+                return False
+        return False
 
     @classmethod
     def exists(cls, key_name: str) -> bool:

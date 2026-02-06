@@ -110,11 +110,20 @@ else
     fi
 fi
 
-# ── Install cffi (fixes WSL/Linux keyring issues) ────────────
+# ── Install Bittensor SDK (for wallet/chain access) ──────────
+info "Installing Bittensor SDK..."
 if [ -n "$VENV_DIR" ]; then
-    $PIP install cffi cryptography 2>/dev/null | tail -1 || true
+    if $PIP install bittensor bittensor-wallet 2>&1 | tail -3; then
+        ok "Bittensor SDK installed"
+    else
+        warn "Bittensor SDK install failed — taox will use btcli fallback"
+    fi
 else
-    $PIP install --user cffi cryptography 2>/dev/null | tail -1 || true
+    if $PIP install --user bittensor bittensor-wallet 2>&1 | tail -3; then
+        ok "Bittensor SDK installed"
+    else
+        warn "Bittensor SDK install failed — taox will use btcli fallback"
+    fi
 fi
 
 # ── Create wrapper script ───────────────────────────────────
