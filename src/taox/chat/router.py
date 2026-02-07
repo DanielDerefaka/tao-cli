@@ -190,6 +190,9 @@ class Router:
             elif intent == IntentType.REBALANCE:
                 return await self._exec_rebalance(slots)
 
+            elif intent == IntentType.CREATE_WALLET:
+                return self._exec_create_wallet(slots)
+
             elif intent == IntentType.HELP:
                 return ExecutionResult(success=True, message=self._get_help())
 
@@ -598,6 +601,96 @@ class Router:
             message=f"Rebalanced {slots.amount} τ across top validators.",
         )
 
+    def _exec_create_wallet(self, slots: Slots) -> ExecutionResult:
+        """Create a new coldkey and/or hotkey via btcli."""
+        from taox.commands.executor import ExecutionMode
+
+        wallet_name = slots.wallet_name
+        hotkey_name = slots.hotkey_name
+        results = []
+
+        if wallet_name and hotkey_name:
+            # Create both coldkey + hotkey via 'btcli wallet create'
+            result = self.executor.execute(
+                group="wallet",
+                subcommand="create",
+                args={"wallet-name": wallet_name, "wallet-hotkey": hotkey_name},
+                flags=["no-password"],
+                mode=ExecutionMode.INTERACTIVE,
+            )
+            if result.success:
+                results.append(f"Created wallet **{wallet_name}** with hotkey **{hotkey_name}**")
+            else:
+                stderr = result.stderr or ""
+                if "already exists" in stderr.lower():
+                    results.append(f"Wallet **{wallet_name}** already exists")
+                else:
+                    return ExecutionResult(
+                        success=False,
+                        message=f"Failed to create wallet: {stderr.split(chr(10))[0][:100]}",
+                    )
+
+        elif wallet_name:
+            # Create coldkey only
+            result = self.executor.execute(
+                group="wallet",
+                subcommand="new-coldkey",
+                args={"wallet-name": wallet_name},
+                flags=["no-password"],
+                mode=ExecutionMode.INTERACTIVE,
+            )
+            if result.success:
+                results.append(f"Created wallet **{wallet_name}**")
+            else:
+                stderr = result.stderr or ""
+                if "already exists" in stderr.lower():
+                    results.append(f"Wallet **{wallet_name}** already exists")
+                else:
+                    return ExecutionResult(
+                        success=False,
+                        message=f"Failed to create wallet: {stderr.split(chr(10))[0][:100]}",
+                    )
+
+        elif hotkey_name:
+            # Create hotkey only (under current wallet)
+            wn = self.settings.bittensor.default_wallet
+            result = self.executor.execute(
+                group="wallet",
+                subcommand="new-hotkey",
+                args={"wallet-name": wn, "wallet-hotkey": hotkey_name},
+                flags=[],
+                mode=ExecutionMode.INTERACTIVE,
+            )
+            if result.success:
+                results.append(f"Created hotkey **{hotkey_name}** in wallet **{wn}**")
+            else:
+                stderr = result.stderr or ""
+                if "already exists" in stderr.lower():
+                    results.append(f"Hotkey **{hotkey_name}** already exists")
+                else:
+                    return ExecutionResult(
+                        success=False,
+                        message=f"Failed to create hotkey: {stderr.split(chr(10))[0][:100]}",
+                    )
+        else:
+            return ExecutionResult(
+                success=False,
+                message="What should the wallet be named?",
+            )
+
+        # Update active wallet config
+        if wallet_name:
+            from taox.chat.state_machine import UserPreferences
+
+            prefs = UserPreferences.load()
+            prefs.default_wallet = wallet_name
+            if hotkey_name:
+                prefs.default_hotkey = hotkey_name
+            prefs.save()
+            results.append(f"Set active wallet to **{wallet_name}**")
+
+        return ExecutionResult(success=True, message=". ".join(results) + ".")
+
     def _exec_set_config(self, slots: Slots) -> ExecutionResult:
         """Update configuration."""
         from taox.chat.state_machine import UserPreferences
@@ -647,6 +740,7 @@ class Router:
 • "transfer 5 TAO to 5xxx..." - Send TAO
 • "show validators on subnet 1" - List validators
 • "list subnets" - Show all subnets
+• "create wallet jeff hotkey jeff_hot" - New wallet
 • "register on subnet 24" - Register
 • "watch tao price" - Set up alerts
 • "my hotkey is dx_hot" - Update settings

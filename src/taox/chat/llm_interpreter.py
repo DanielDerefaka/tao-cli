@@ -56,6 +56,7 @@ class IntentType(str, Enum):
     RECOMMEND = "recommend"
     WATCH = "watch"
     REBALANCE = "rebalance"
+    CREATE_WALLET = "create_wallet"
 
     # Meta
     HELP = "help"
@@ -306,6 +307,7 @@ class LLMInterpreter:
             OldIntent.RECOMMEND: IntentType.RECOMMEND,
             OldIntent.WATCH: IntentType.WATCH,
             OldIntent.REBALANCE: IntentType.REBALANCE,
+            OldIntent.CREATE_WALLET: IntentType.CREATE_WALLET,
             OldIntent.HELP: IntentType.HELP,
             OldIntent.GREETING: IntentType.GREETING,
             OldIntent.UNKNOWN: IntentType.UNCLEAR,
@@ -372,6 +374,13 @@ class LLMInterpreter:
                 if slots.amount
                 else "How much TAO to rebalance across validators?"
             ),
+            IntentType.CREATE_WALLET: (
+                f"Create wallet '{slots.wallet_name}'"
+                + (f" with hotkey '{slots.hotkey_name}'" if slots.hotkey_name else "")
+                + ". Confirm?"
+                if slots.wallet_name
+                else "What should the wallet be named?"
+            ),
             IntentType.GREETING: "Hey! What can I help you with?",
             IntentType.HELP: "Here's what I can do...",
             IntentType.UNCLEAR: "Not sure what you mean. Try 'help' for options.",
@@ -407,6 +416,8 @@ class LLMInterpreter:
             ready = slots.config_key is not None and slots.config_value is not None
         elif intent in (IntentType.RECOMMEND, IntentType.REBALANCE):
             ready = slots.amount is not None
+        elif intent == IntentType.CREATE_WALLET:
+            ready = slots.wallet_name is not None or slots.hotkey_name is not None
 
         # If not ready, adjust reply to prompt for missing info
         if not ready and intent not in (IntentType.UNCLEAR, IntentType.GREETING, IntentType.HELP):
@@ -423,6 +434,7 @@ class LLMInterpreter:
                 IntentType.TRANSFER,
                 IntentType.REGISTER,
                 IntentType.REBALANCE,
+                IntentType.CREATE_WALLET,
             ),
             ready_to_execute=ready,
         )

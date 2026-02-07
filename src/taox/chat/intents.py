@@ -29,6 +29,7 @@ class IntentType(str, Enum):
     RECOMMEND = "recommend"  # Staking recommendations
     WATCH = "watch"  # Price/validator alerts
     REBALANCE = "rebalance"  # Batch stake across validators
+    CREATE_WALLET = "create_wallet"  # Create new coldkey/hotkey
     HELP = "help"
     CONFIRM = "confirm"  # User confirming something
     GREETING = "greeting"  # Hello, hi, etc.
@@ -80,6 +81,22 @@ class MockIntentParser:
 
     # Patterns for intent detection (ORDER MATTERS — checked top to bottom)
     PATTERNS = {
+        # CREATE_WALLET MUST be before SET_CONFIG
+        # (prevents "create wallet jeff" from matching set_config)
+        IntentType.CREATE_WALLET: [
+            # "create wallet jeff", "create a wallet named jeff"
+            r"(?:create|make|add|new)\s+(?:a\s+)?(?:new\s+)?(?:wallet|coldkey)\s+(?:named?\s+)?(\w+)",
+            # "create wallet jeff hotkey jeff_hot"
+            r"(?:create|make|add|new)\s+(?:a\s+)?(?:new\s+)?(?:wallet|coldkey)\s+(?:named?\s+)?(\w+)\s+(?:and\s+)?hotkey\s+(\w+)",
+            # "create another wallet coldkey name jeff hotkey jeff_hot"
+            r"(?:create|make|add|new)\s+(?:another\s+)?(?:wallet|coldkey).*?(?:name|named?)\s+(\w+).*?hotkey\s+(\w+)",
+            # "create coldkey jeff and hotkey jeff_hot"
+            r"(?:create|make|add|new)\s+(?:a\s+)?(?:new\s+)?coldkey\s+(\w+)\s+(?:and\s+)?(?:a\s+)?(?:new\s+)?hotkey\s+(\w+)",
+            # "new wallet jeff"
+            r"new\s+(?:wallet|coldkey)\s+(\w+)",
+            # "create hotkey jeff_hot" (hotkey only, for existing wallet)
+            r"(?:create|make|add|new)\s+(?:a\s+)?(?:new\s+)?hotkey\s+(\w+)",
+        ],
         # Config MUST be before VALIDATORS (prevents "set wallet to validator" misfire)
         IntentType.SET_CONFIG: [
             # Wallet/coldkey patterns — require explicit set/change/is verbs
@@ -300,7 +317,17 @@ class MockIntentParser:
                     # Extract groups based on intent type
                     groups = match.groups()
 
-                    if intent_type == IntentType.STAKE and groups:
+                    if intent_type == IntentType.CREATE_WALLET and groups:
+                        # First group = wallet name, second group = hotkey name
+                        if groups[0]:
+                            intent.wallet_name = groups[0].strip()
+                        if len(groups) > 1 and groups[1]:
+                            intent.hotkey_name = groups[1].strip()
+                        # Check if it's hotkey-only creation
+                        if not intent.wallet_name and "hotkey" in text:
+                            intent.hotkey_name = groups[0].strip()
+
+                    elif intent_type == IntentType.STAKE and groups:
                         if groups[0]:
                             with contextlib.suppress(ValueError):
                                 intent.amount = float(groups[0])

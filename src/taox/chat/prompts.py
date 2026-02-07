@@ -80,6 +80,7 @@ Tools & diagnostics (no confirmation):
 - "recommend" → Get staking recommendations. Ready if: amount present. Use when user asks where to stake, wants validator suggestions, or asks for staking advice.
 - "watch" → Set up price/validator monitoring. Ready if: always. Use when user wants alerts or monitoring.
 - "rebalance" → Batch stake across top validators. Ready if: amount present. Needs confirmation. Use when user wants to spread/split/distribute stake.
+- "create_wallet" → Create a new wallet (coldkey) and/or hotkey. Needs confirmation. Ready if: wallet_name present. Extract wallet_name and optionally hotkey_name. Use when user says "create wallet", "new wallet", "make a coldkey", etc.
 
 Config:
 - "set_config" → Update wallet/hotkey/netuid settings.
@@ -184,6 +185,12 @@ User: "split 200 tao across top validators"
 
 User: "watch tao price"
 {{"intent": "watch", "slots": {{}}, "reply": "Setting up price monitoring...", "needs_confirmation": false, "missing_info": null, "ready_to_execute": true}}
+
+User: "create wallet jeff hotkey jeff_hot"
+{{"intent": "create_wallet", "slots": {{"wallet_name": "jeff", "hotkey_name": "jeff_hot"}}, "reply": "Create wallet 'jeff' with hotkey 'jeff_hot'. Confirm?", "needs_confirmation": true, "missing_info": null, "ready_to_execute": true}}
+
+User: "new wallet miner1"
+{{"intent": "create_wallet", "slots": {{"wallet_name": "miner1"}}, "reply": "Create wallet 'miner1'. Confirm?", "needs_confirmation": true, "missing_info": null, "ready_to_execute": true}}
 
 # CURRENT CONTEXT
 Wallet: {wallet}
